@@ -8,7 +8,7 @@
     "scheme": "superofertaapp",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "../../assets/images/icon.png",
+      "icon": "./assets/images/icon.png",
       "bundleIdentifier": "com.zmorenoowsteam.superofertasmym",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -17,8 +17,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#B83B23",
-        "foregroundImage": "../../assets/images/android-icon-foreground.png",
-        "monochromeImage": "../../assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.zmorenoowsteam.superofertasmym"
