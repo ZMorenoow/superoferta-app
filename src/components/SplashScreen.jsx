@@ -1,22 +1,20 @@
 // src/components/SplashScreen.jsx
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   Animated,
-  Dimensions,
   Image,
   StyleSheet,
-  View
+  View,
 } from 'react-native';
-const { width, height } = Dimensions.get('window');
 
-export default function SplashScreen({ onFinish, onLayout }) {
-  const logoScale = useRef(new Animated.Value(0.3)).current;
+export default function AppSplashScreen({ onFinish }) {
+  const logoScale   = useRef(new Animated.Value(0.3)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
-  const taglineOpacity = useRef(new Animated.Value(0)).current;
-  const screenOpacity = useRef(new Animated.Value(1)).current;
+  const taglineOpacity  = useRef(new Animated.Value(0)).current;
+  const screenOpacity   = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    Animated.sequence([
+    const animation = Animated.sequence([
       // 1. Logo hace pop-in
       Animated.parallel([
         Animated.spring(logoScale, {
@@ -47,17 +45,19 @@ export default function SplashScreen({ onFinish, onLayout }) {
         duration: 500,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      onFinish();
+    ]);
+
+    animation.start(() => {
+      // Llamamos onFinish solo si el componente todavía está montado
+      onFinish?.();
     });
+
+    // Limpiamos la animación si el componente se desmonta antes de terminar
+    return () => animation.stop();
   }, []);
 
   return (
-    <Animated.View
-      style={[styles.container, { opacity: screenOpacity }]}
-      onLayout={onLayout}
-    >
-      {/* Logo animado */}
+    <Animated.View style={[styles.container, { opacity: screenOpacity }]}>
       <Animated.View
         style={[
           styles.logoContainer,
@@ -69,16 +69,14 @@ export default function SplashScreen({ onFinish, onLayout }) {
       >
         <Image
           source={require('../../assets/images/logo.png')}
-          style={{ width: 200, height: 160, resizeMode: 'contain' }}
+          style={styles.logo}
         />
       </Animated.View>
 
-      {/* Tagline */}
       <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
         Tu supermercado, a tu hora
       </Animated.Text>
 
-      {/* Dots decorativos */}
       <View style={styles.dotsContainer}>
         {[...Array(6)].map((_, i) => (
           <View key={i} style={[styles.dot, { opacity: 0.08 + i * 0.04 }]} />
@@ -98,26 +96,10 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
   },
-  logoCircle: {
-    width: 110,
-    height: 110,
-    borderRadius: 28,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 12,
-    marginBottom: 20,
-  },
-  logoEmoji: { fontSize: 54 },
-  appName: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: 0.5,
+  logo: {
+    width: 200,
+    height: 160,
+    resizeMode: 'contain',
   },
   tagline: {
     marginTop: 12,

@@ -1,8 +1,10 @@
+// app/index.jsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
-import SplashScreen from '../components/SplashScreen';
+// Renombrado a AppSplashScreen para evitar conflicto con expo-splash-screen
+import AppSplashScreen from '../components/SplashScreen';
 
 export default function Entry() {
   const [splashDone, setSplashDone] = useState(false);
@@ -21,6 +23,6 @@ export default function Entry() {
     }
   };
 
-  if (!splashDone) return <SplashScreen onFinish={handleFinish} />;
+  if (!splashDone) return <AppSplashScreen onFinish={handleFinish} />;
   return <View style={{ flex: 1 }} />;
 }

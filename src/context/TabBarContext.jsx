@@ -1,3 +1,4 @@
+// context/TabBarContext.jsx
 import { createContext, useContext, useRef } from 'react';
 import { Animated } from 'react-native';
 
@@ -21,7 +22,6 @@ export function TabBarProvider({ children }) {
     }).start();
   };
 
-  // Pásale esto al onScroll de cualquier ScrollView/FlatList
   const handleScroll = (event) => {
     const currentOffset = event.nativeEvent.contentOffset.y;
     const diff = currentOffset - lastOffset.current;
@@ -29,9 +29,9 @@ export function TabBarProvider({ children }) {
     if (Math.abs(diff) < SCROLL_THRESHOLD) return;
 
     if (diff > 0 && currentOffset > HIDE_AFTER) {
-      setVisible(false); // bajando
+      setVisible(false); // bajando → ocultar tab bar
     } else if (diff < 0) {
-      setVisible(true); // subiendo
+      setVisible(true);  // subiendo → mostrar tab bar
     }
 
     lastOffset.current = currentOffset;
