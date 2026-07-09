@@ -4,7 +4,6 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
-    "@expo/ui": "0.2.0-canary-20260121-a63c0dd",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/native": "^7.1.8",
     "axios": "^1.18.1",
