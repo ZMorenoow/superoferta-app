@@ -16,31 +16,31 @@ const PRIMARY = '#C21807';
 const MOCK_CARRITO = [
   {
     id: '1',
-    nombre: 'Pan Marraqueta x6',
+    nombre: 'Manzana Roja',
     precio: 990,
     cantidad: 2,
-    imagen: 'https://media.istockphoto.com/id/1071166790/es/foto/pan-marraqueta.jpg?s=612x612&w=0&k=20&c=cpc5e6V8T2BjBVC4ORxCOyY4HUK0V_PFnsLoF4UaV5Q=',
+    imagen: 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400',
   },
   {
     id: '2',
-    nombre: 'Leche Entera Colún 1L',
-    precio: 1290,
-    cantidad: 1,
-    imagen: 'https://www.colun.cl/admin/archivos/imagenes/productos/yNn5q4tNxVzdWo7Rj4n9.png',
+    nombre: 'Pechuga de pollo',
+    precio: 5290,
+    cantidad: 2,
+    imagen: 'https://media.istockphoto.com/id/1400102034/es/foto/pechuga-de-pollo-aislada-filete-de-pollo-crudo-sobre-fondo-blanco-aves-de-corral-crudas-carne.jpg?s=612x612&w=0&k=20&c=GGfkxPe4W0qLPRuygj9WPm7wP5IlB_g-26K0IPHpp3g=',
   },
   {
     id: '3',
-    nombre: 'Arroz Grado 1 Premium 1Kg',
-    precio: 1590,
+    nombre: 'Detergente Omo',
+    precio: 2990,
     cantidad: 3,
-    imagen: 'https://http2.mlstatic.com/D_NQ_NP_2X_899761-MLA99842539997_112025-F.webp',
+    imagen: 'https://media.falabella.com/tottusCL/20548530_1/w=1200,h=1200,fit=pad',
   },
   {
     id: '4',
     nombre: 'Aceite El Monarca 900ML',
     precio: 3490,
     cantidad: 1,
-    imagen: 'https://r.bolder.run/4064/original/943823-7804658860091_%28renovacion%29.jpg',
+    imagen: 'https://mantilhuealimentos.cl/wp-content/uploads/2023/10/Aceite-El-Monarca.png',
   },
 ];
 
