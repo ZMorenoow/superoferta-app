@@ -5,10 +5,11 @@ import {
   Image, ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useCartStore } from '../store/cartStore';
 
 const PRIMARY = '#C21807';
+const insents = useSafeAreaInsets();
 
 function Section({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -180,7 +181,7 @@ export default function ProductDetail() {
       </ScrollView>
 
       {/* Footer fijo */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: 12 + insents.bottom}]}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>${(product.price * qty).toLocaleString('es-CL')}</Text>
@@ -272,7 +273,7 @@ const styles = StyleSheet.create({
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', paddingHorizontal: 20,
-    paddingBottom: 34, paddingTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1, borderTopColor: '#f0f0f0',
   },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
