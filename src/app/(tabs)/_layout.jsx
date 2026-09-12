@@ -2,9 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabBarProvider, useTabBar } from '../../context/TabBarContext';
 
+
 const PRIMARY = '#C21807';
+const BASE_BOTTOM = 24;
 
 const TABS = [
   { name: 'index',      title: 'Inicio',     icon: 'home-outline',     iconActive: 'home' },
@@ -17,6 +20,7 @@ const TABS = [
 function AnimatedTabBar({ state, descriptors, navigation }) {
   const animations = useRef(TABS.map(() => new Animated.Value(1))).current;
   const { translateY } = useTabBar();
+  const insents = useSafeAreaInsets();
 
   const handlePress = (tabIndex, routeName, isFocused) => {
     Animated.sequence([
@@ -39,7 +43,7 @@ function AnimatedTabBar({ state, descriptors, navigation }) {
   };
 
   return (
-    <Animated.View style={[styles.tabBar, { transform: [{ translateY }] }]}>
+    <Animated.View style={[styles.tabBar, { bottom: BASE_BOTTOM + insents.bottom, transform : [{ translateY }] }]}>
       {state.routes.map((route) => {
         const tab = TABS.find((t) => t.name === route.name);
         if (!tab) return null;
@@ -106,7 +110,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 24,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',

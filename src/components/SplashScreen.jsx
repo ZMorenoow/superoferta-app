@@ -89,7 +89,7 @@ export default function AppSplashScreen({ onFinish }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#C21807',
+    backgroundColor: '#FF2B2B',
     alignItems: 'center',
     justifyContent: 'center',
   },
