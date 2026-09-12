@@ -9,7 +9,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useCartStore } from '../store/cartStore';
 
 const PRIMARY = '#C21807';
-const insents = useSafeAreaInsets();
 
 function Section({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -43,6 +42,7 @@ export default function ProductDetail() {
   const product = productStr ? JSON.parse(productStr) : null;
   const { addItem, getTotalItems } = useCartStore();
   const [qty, setQty] = useState(1);
+  const insets = useSafeAreaInsets(); // ✅ ahora dentro del componente
 
   if (!product) {
     return (
@@ -181,7 +181,7 @@ export default function ProductDetail() {
       </ScrollView>
 
       {/* Footer fijo */}
-      <View style={[styles.footer, { paddingBottom: 12 + insents.bottom}]}>
+      <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>${(product.price * qty).toLocaleString('es-CL')}</Text>
