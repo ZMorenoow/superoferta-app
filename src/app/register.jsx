@@ -1,15 +1,15 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
@@ -52,10 +52,13 @@ export default function RegisterScreen() {
         return;
       }
 
-      Alert.alert('Listo', 'Revisa tu correo para verificar la cuenta' ,[
-        { text: 'OK', onPress: () => router.replace('/login')},
-      ]);
-
+      Alert.alert(
+        '✅ Cuenta creada',
+        'Se ha creado correctamente tu cuenta. Verifica tu correo electrónico para activarla.',
+        [
+          { text: 'Ir a iniciar sesión', onPress: () => router.replace('/login') },
+        ]
+      );
       if (perfilError) {
         Alert.alert('Error', 'Cuenta creada, pero no se pudo guardar el perfil');
         return;

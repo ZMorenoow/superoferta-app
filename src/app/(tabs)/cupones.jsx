@@ -3,14 +3,12 @@ import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTabBar } from '../../context/TabBarContext';
 
-const PRIMARY = '#C21807';
-
 const CUPONES = [
-  { id: '1', discount: '20%', description: 'En toda la sección Frutas y Verduras', expiry: '30 jun', min: '$5.000', activated: false },
-  { id: '2', discount: '$1.000', description: 'En compras sobre $15.000', expiry: '28 jun', min: '$15.000', activated: true },
-  { id: '3', discount: '15%', description: 'En productos lácteos seleccionados', expiry: '2 jul', min: '$3.000', activated: false },
-  { id: '4', discount: '2x1', description: 'En pan marraqueta todos los días', expiry: '5 jul', min: null, activated: false },
-  { id: '5', discount: '$500', description: 'En bebidas 1.5L o más', expiry: '29 jun', min: '$2.000', activated: true },
+  { id: '1', discount: '20%', description: 'En toda la sección Frutas y Verduras', expiry: '07 oct', min: '$5.000', activated: false },
+  { id: '2', discount: '$1.000', description: 'En compras sobre $15.000', expiry: '29 sep', min: '$15.000', activated: true },
+  { id: '3', discount: '15%', description: 'En productos lácteos seleccionados', expiry: '02 oct', min: '$3.000', activated: false },
+  { id: '4', discount: '$500', description: 'En bebidas 1.5L o más', expiry: '01 oct', min: '$2.000', activated: true },
+  { id: '5', discount: '2x1', description: 'En pan marraqueta todos los días', expiry: '25 sep', min: null, activated: false },
 ];
 
 export default function CuponesScreen() {
@@ -84,11 +82,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
   discountSide: {
-    width: 80, backgroundColor: PRIMARY,
+    width: 80, backgroundColor: '#ED1C24',
     alignItems: 'center', justifyContent: 'center',
     paddingVertical: 20,
   },
-  discountSideActive: { backgroundColor: '#1B6B3A' },
+  discountSideActive: { backgroundColor: '#FBB03B' },
   discountText: { fontSize: 22, fontWeight: '900', color: '#fff' },
   discountLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
   separator: { width: 20, alignItems: 'center', justifyContent: 'center' },
@@ -111,7 +109,7 @@ const styles = StyleSheet.create({
   expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   expiry: { fontSize: 11, color: '#888' },
   activateBtn: {
-    backgroundColor: PRIMARY, paddingHorizontal: 14,
+    backgroundColor: '#FF5A18', paddingHorizontal: 14,
     paddingVertical: 6, borderRadius: 20,
   },
   activatedBtn: { backgroundColor: '#e8f5ed' },
