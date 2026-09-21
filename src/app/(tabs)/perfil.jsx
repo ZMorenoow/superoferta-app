@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router'; // ← ambos desde aquí ahora
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTabBar } from '../../context/TabBarContext';
+import { supabase } from '../../utils/supabase';
 
 const PRIMARY = '#C21807';
 
@@ -19,12 +20,46 @@ const MENU_ITEMS = [
 export default function PerfilScreen() {
   const router = useRouter();
   const { handleScroll } = useTabBar();
+  const [perfil, setPerfil] = useState(null);
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const cargarPerfil = useCallback(async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+
+    setEmail(user.email);
+
+    const { data, error } = await supabase
+      .from('perfiles')
+      .select('nombre, apellido')
+      .eq('id', user.id)
+      .single();
+
+    if (!error && data) {
+      setPerfil(data);
+    }
+    setLoading(false);
+  }, []);
+
+  // Recarga cada vez que vuelves a esta pestaña (por si el nombre cambió)
+  useFocusEffect(
+    useCallback(() => {
+      cargarPerfil();
+    }, [cargarPerfil])
+  );
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('@auth_token');
-    await AsyncStorage.removeItem('@onboarding_done');
-    router.replace('/');
+    await supabase.auth.signOut();
+    router.replace('/login');
   };
+
+  const nombreCompleto = perfil ? `${perfil.nombre} ${perfil.apellido}` : 'Mi cuenta';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -38,16 +73,20 @@ export default function PerfilScreen() {
           <Text style={styles.title}>Mi Perfil</Text>
         </View>
 
-        {/* Avatar */}
         <View style={styles.avatarSection}>
           <View style={styles.avatar}>
             <Ionicons name="person" size={40} color="#fff" />
           </View>
-          <Text style={styles.userName}>Mi cuenta</Text>
-          <Text style={styles.userEmail}>usuario@superoferta.cl</Text>
+          {loading ? (
+            <ActivityIndicator color={PRIMARY} style={{ marginTop: 8 }} />
+          ) : (
+            <>
+              <Text style={styles.userName}>{nombreCompleto}</Text>
+              <Text style={styles.userEmail}>{email}</Text>
+            </>
+          )}
         </View>
 
-        {/* Menú */}
         <View style={styles.menuCard}>
           {MENU_ITEMS.map((item, i) => (
             <TouchableOpacity
@@ -65,7 +104,6 @@ export default function PerfilScreen() {
           ))}
         </View>
 
-        {/* Cerrar sesión */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={20} color={PRIMARY} />
           <Text style={styles.logoutText}>Cerrar sesión</Text>

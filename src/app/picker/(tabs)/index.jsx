@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -7,6 +6,7 @@ import {
   TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { supabase } from '../../../utils/supabase';
 
 const PRIMARY = '#C21807';
 
@@ -51,8 +51,20 @@ export default function PickerHome() {
   const router = useRouter();
   const [nombre, setNombre] = useState('Picker');
 
-  useEffect(() => {
-    AsyncStorage.getItem('@user_nombre').then((n) => { if (n) setNombre(n); });
+    useEffect(() => {
+    const cargarNombre = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('perfiles')
+        .select('nombre')
+        .eq('id', user.id)
+        .single();
+
+      if (data?.nombre) setNombre(data.nombre);
+    };
+    cargarNombre();
   }, []);
 
   const renderPedido = ({ item }) => {
@@ -133,10 +145,9 @@ export default function PickerHome() {
         <TouchableOpacity
           style={styles.logoutBtn}
           onPress={async () => {
-            await AsyncStorage.removeItem('@auth_token');
-            await AsyncStorage.removeItem('@user_rol');
-            router.replace('/login');
-          }}
+          await supabase.auth.signOut();
+          router.replace('/login');
+        }}
         >
           <Ionicons name="log-out-outline" size={22} color="#888" />
         </TouchableOpacity>

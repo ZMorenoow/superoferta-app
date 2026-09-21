@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  Image, ScrollView, StyleSheet, Text,
+  ActivityIndicator, Image, ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useCartStore } from '../store/cartStore';
+import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
 
@@ -38,11 +38,143 @@ const secStyles = StyleSheet.create({
 
 export default function ProductDetail() {
   const router = useRouter();
-  const { product: productStr } = useLocalSearchParams();
-  const product = productStr ? JSON.parse(productStr) : null;
-  const { addItem, getTotalItems } = useCartStore();
+  const { id } = useLocalSearchParams();
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
-  const insets = useSafeAreaInsets(); // ✅ ahora dentro del componente
+  const [agregando, setAgregando] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
+  const insets = useSafeAreaInsets();
+
+  const cargarCartCount = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setCartCount(0);
+      return;
+    }
+
+    const { data: carrito } = await supabase
+      .from('carrito')
+      .select('id')
+      .eq('id_cliente', user.id)
+      .maybeSingle();
+
+    if (!carrito) {
+      setCartCount(0);
+      return;
+    }
+
+    const { data: items } = await supabase
+      .from('carrito_items')
+      .select('cantidad')
+      .eq('id_carrito', carrito.id);
+
+    const total = (items || []).reduce((acc, i) => acc + i.cantidad, 0);
+    setCartCount(total);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarCartCount();
+    }, [cargarCartCount])
+  );
+
+  useEffect(() => {
+    const cargarProducto = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (!error && data) {
+        setProduct({
+          id: data.id,
+          name: data.nombre,
+          description: data.descripcion,
+          price: data.precio ?? 0,
+          original_price: null,
+          image_url: data.imagen_url,
+          stock: data.stock ?? 0,
+          unit: '',
+          tags: [],
+          characteristics: [],
+        });
+      }
+      setLoading(false);
+    };
+
+    if (id) cargarProducto();
+  }, [id]);
+
+  const handleAgregarAlCarrito = async () => {
+    setAgregando(true);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push('/login');
+      setAgregando(false);
+      return;
+    }
+
+    let { data: carrito } = await supabase
+      .from('carrito')
+      .select('id')
+      .eq('id_cliente', user.id)
+      .maybeSingle();
+
+    if (!carrito) {
+      const { data: nuevo, error } = await supabase
+        .from('carrito')
+        .insert({ id_cliente: user.id })
+        .select('id')
+        .single();
+      if (error) {
+        setAgregando(false);
+        return;
+      }
+      carrito = nuevo;
+    }
+
+    const { data: itemExistente } = await supabase
+      .from('carrito_items')
+      .select('id, cantidad')
+      .eq('id_carrito', carrito.id)
+      .eq('id_producto', product.id)
+      .maybeSingle();
+
+    if (itemExistente) {
+      await supabase
+        .from('carrito_items')
+        .update({ cantidad: itemExistente.cantidad + qty })
+        .eq('id', itemExistente.id);
+    } else {
+      await supabase.from('carrito_items').insert({
+        id_carrito: carrito.id,
+        id_producto: product.id,
+        cantidad: qty,
+        precio_unitario: product.price,
+      });
+    }
+
+    await cargarCartCount();
+    setAgregando(false);
+
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)');
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 40 }} />
+      </SafeAreaView>
+    );
+  }
 
   if (!product) {
     return (
@@ -59,7 +191,6 @@ export default function ProductDetail() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#1a1a1a" />
@@ -67,16 +198,15 @@ export default function ProductDetail() {
         <Text style={styles.headerTitle} numberOfLines={1}>{product.name}</Text>
         <TouchableOpacity style={styles.cartBtn} onPress={() => router.push('/cart')}>
           <Ionicons name="cart-outline" size={24} color={PRIMARY} />
-          {getTotalItems() > 0 && (
+          {cartCount > 0 && (
             <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>{getTotalItems()}</Text>
+              <Text style={styles.cartBadgeText}>{cartCount}</Text>
             </View>
           )}
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
-        {/* Imagen */}
         <View style={styles.imageContainer}>
           {hasDiscount && (
             <View style={styles.discountBadge}>
@@ -91,9 +221,8 @@ export default function ProductDetail() {
         </View>
 
         <View style={styles.infoContainer}>
-          {/* Nombre y precio */}
           <Text style={styles.productName}>{product.name}</Text>
-          <Text style={styles.productUnit}>{product.unit}</Text>
+          {!!product.unit && <Text style={styles.productUnit}>{product.unit}</Text>}
 
           <View style={styles.priceRow}>
             <Text style={styles.price}>${product.price.toLocaleString('es-CL')}</Text>
@@ -102,7 +231,6 @@ export default function ProductDetail() {
             )}
           </View>
 
-          {/* Tags */}
           {product.tags?.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               <View style={styles.tagsRow}>
@@ -115,7 +243,6 @@ export default function ProductDetail() {
             </ScrollView>
           )}
 
-          {/* Stock */}
           <View style={[styles.stockBadge, product.stock === 0 && styles.stockBadgeOut]}>
             <Ionicons
               name={product.stock > 0 ? 'checkmark-circle' : 'close-circle'}
@@ -127,7 +254,6 @@ export default function ProductDetail() {
             </Text>
           </View>
 
-          {/* Selector cantidad */}
           {product.stock > 0 && (
             <View style={styles.qtyRow}>
               <Text style={styles.qtyLabel}>Cantidad</Text>
@@ -143,9 +269,7 @@ export default function ProductDetail() {
             </View>
           )}
 
-          {/* Secciones colapsables */}
           <View style={{ marginTop: 8 }}>
-            {/* Características */}
             {product.characteristics?.length > 0 && (
               <Section title="Características" defaultOpen={true}>
                 {product.characteristics.map((c, i) => (
@@ -157,47 +281,35 @@ export default function ProductDetail() {
               </Section>
             )}
 
-            {/* Descripción */}
             {product.description && (
-              <Section title="Descripción">
+              <Section title="Descripción" defaultOpen={true}>
                 <Text style={styles.descriptionText}>{product.description}</Text>
-              </Section>
-            )}
-
-            {/* Condición alimentaria */}
-            {product.tags?.length > 0 && (
-              <Section title="Condición alimentaria">
-                <View style={styles.tagsRow}>
-                  {product.tags.map((tag) => (
-                    <View key={tag} style={styles.tag}>
-                      <Text style={styles.tagText}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
               </Section>
             )}
           </View>
         </View>
       </ScrollView>
 
-      {/* Footer fijo */}
       <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>${(product.price * qty).toLocaleString('es-CL')}</Text>
         </View>
         <TouchableOpacity
-          style={[styles.addBtn, product.stock === 0 && styles.addBtnDisabled]}
-          onPress={() => {
-            for (let i = 0; i < qty; i++) addItem(product);
-            router.back();
-          }}
-          disabled={product.stock === 0}
+          style={[styles.addBtn, (product.stock === 0 || agregando) && styles.addBtnDisabled]}
+          onPress={handleAgregarAlCarrito}
+          disabled={product.stock === 0 || agregando}
         >
-          <Ionicons name="cart-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.addBtnText}>
-            {product.stock === 0 ? 'Sin stock' : 'Agregar al carrito'}
-          </Text>
+          {agregando ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Ionicons name="cart-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.addBtnText}>
+                {product.stock === 0 ? 'Sin stock' : 'Agregar al carrito'}
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,8 +17,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTabBar } from '../context/TabBarContext';
-import { useCartStore } from '../store/cartStore';
-import { api, MOCK_BANNERS } from '../utils/api';
+import { MOCK_BANNERS } from '../utils/api';
+import { supabase } from '../utils/supabase';
 
 const { width } = Dimensions.get('window');
 const PRIMARY = '#C21807';
@@ -56,6 +57,11 @@ function BannerSlider() {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         keyExtractor={(item) => item.id}
+        getItemLayout={(data, index) => ({
+          length: width - 40,
+          offset: (width - 40) * index,
+          index,
+        })}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
           { useNativeDriver: false }
@@ -86,18 +92,18 @@ function BannerSlider() {
   );
 }
 
-const StaticHeader = React.memo(({ activeCategory, setActiveCategory, navigation, getTotalItems, onCategoryChange }) => (
+const StaticHeader = React.memo(({ activeCategory, setActiveCategory, router, cartCount, onCategoryChange }) => (
   <View>
     <View style={styles.header}>
       <View>
         <Text style={styles.greeting}>Hola 👋</Text>
         <Text style={styles.headerTitle}>¿Qué necesitas hoy?</Text>
       </View>
-      <TouchableOpacity style={styles.cartBtn} onPress={() => navigation.navigate('Cart')}>
+      <TouchableOpacity style={styles.cartBtn} onPress={() => router.push('/cart')}>
         <Ionicons name="cart-outline" size={26} color={PRIMARY} />
-        {getTotalItems() > 0 && (
+        {cartCount > 0 && (
           <View style={styles.cartBadge}>
-            <Text style={styles.cartBadgeText}>{getTotalItems()}</Text>
+            <Text style={styles.cartBadgeText}>{cartCount}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -130,22 +136,82 @@ const StaticHeader = React.memo(({ activeCategory, setActiveCategory, navigation
   </View>
 ));
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen() {
+  const router = useRouter();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
-  const { addItem, getTotalItems } = useCartStore();
+  const [cartCount, setCartCount] = useState(0);
   const { handleScroll } = useTabBar();
 
+  const cargarCartCount = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setCartCount(0);
+      return;
+    }
+
+    const { data: carrito } = await supabase
+      .from('carrito')
+      .select('id')
+      .eq('id_cliente', user.id)
+      .maybeSingle();
+
+    if (!carrito) {
+      setCartCount(0);
+      return;
+    }
+
+    const { data: items } = await supabase
+      .from('carrito_items')
+      .select('cantidad')
+      .eq('id_carrito', carrito.id);
+
+    const total = (items || []).reduce((acc, i) => acc + i.cantidad, 0);
+    setCartCount(total);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargarCartCount();
+    }, [cargarCartCount])
+  );
+
   const fetchProducts = useCallback(async (cat = activeCategory, q = search) => {
+    setLoading(true);
     try {
-      const params = {};
-      if (cat !== 'all') params.category = cat;
-      if (q) params.q = q;
-      const res = await api.get('/products', { params });
-      setProducts(res.data);
+      let query = supabase
+        .from('productos')
+        .select('*')
+        .eq('activo', true);
+
+      if (cat !== 'all') {
+        query = query.eq('id_categoria', cat);
+      }
+      if (q) {
+        query = query.ilike('nombre', `%${q}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error(error);
+        setProducts([]);
+      } else {
+        setProducts(
+          (data || []).map((p) => ({
+            id: p.id,
+            name: p.nombre,
+            price: p.precio ?? 0,
+            original_price: null,
+            image_url: p.imagen_url,
+            stock: p.stock,
+            unit: '',
+          }))
+        );
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -160,6 +226,53 @@ export default function HomeScreen({ navigation }) {
     setActiveCategory(catId);
   }, []);
 
+  const handleAddToCart = useCallback(async (item) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    let { data: carrito } = await supabase
+      .from('carrito')
+      .select('id')
+      .eq('id_cliente', user.id)
+      .maybeSingle();
+
+    if (!carrito) {
+      const { data: nuevo, error } = await supabase
+        .from('carrito')
+        .insert({ id_cliente: user.id })
+        .select('id')
+        .single();
+      if (error) return;
+      carrito = nuevo;
+    }
+
+    const { data: itemExistente } = await supabase
+      .from('carrito_items')
+      .select('id, cantidad')
+      .eq('id_carrito', carrito.id)
+      .eq('id_producto', item.id)
+      .maybeSingle();
+
+    if (itemExistente) {
+      await supabase
+        .from('carrito_items')
+        .update({ cantidad: itemExistente.cantidad + 1 })
+        .eq('id', itemExistente.id);
+    } else {
+      await supabase.from('carrito_items').insert({
+        id_carrito: carrito.id,
+        id_producto: item.id,
+        cantidad: 1,
+        precio_unitario: item.price,
+      });
+    }
+
+    cargarCartCount();
+  }, [router, cargarCartCount]);
+
   const renderProduct = useCallback(({ item }) => {
     const hasDiscount = item.original_price && item.original_price > item.price;
     const discountPct = hasDiscount
@@ -169,7 +282,7 @@ export default function HomeScreen({ navigation }) {
     return (
       <TouchableOpacity
         style={styles.productCard}
-        onPress={() => navigation.navigate('ProductDetail', { product: item })}
+        onPress={() => router.push({ pathname: '/product-detail', params: { id: item.id } })}
         activeOpacity={0.85}
       >
         <View style={styles.productImageWrapper}>
@@ -195,7 +308,7 @@ export default function HomeScreen({ navigation }) {
             </View>
             <TouchableOpacity
               style={[styles.addBtn, item.stock === 0 && styles.addBtnDisabled]}
-              onPress={() => addItem(item)}
+              onPress={() => handleAddToCart(item)}
               disabled={item.stock === 0}
             >
               <Ionicons name={item.stock === 0 ? 'close' : 'add'} size={20} color="#fff" />
@@ -205,17 +318,17 @@ export default function HomeScreen({ navigation }) {
         </View>
       </TouchableOpacity>
     );
-  }, [navigation, addItem]);
+  }, [router, handleAddToCart]);
 
   const listHeader = useCallback(() => (
     <StaticHeader
       activeCategory={activeCategory}
       setActiveCategory={setActiveCategory}
-      navigation={navigation}
-      getTotalItems={getTotalItems}
+      router={router}
+      cartCount={cartCount}
       onCategoryChange={handleCategoryChange}
     />
-  ), [activeCategory]);
+  ), [activeCategory, cartCount]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>

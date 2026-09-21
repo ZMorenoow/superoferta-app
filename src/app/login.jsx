@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -15,13 +14,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
-
-const MOCK_USERS = [
-  { email: 'cliente@superoferta.cl', password: '123456', rol: 'cliente', nombre: 'Juan Cliente' },
-  { email: 'picker@superoferta.cl', password: '123456', rol: 'picker', nombre: 'Pedro Picker' },
-];
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -32,24 +27,41 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const user = MOCK_USERS.find(
-      (u) => u.email === email.trim().toLowerCase() && u.password === password
-    );
-
-    if (!user) {
-      Alert.alert('Error', 'Correo o contraseña incorrectos');
+    if (!email.trim() || !password) {
+      Alert.alert('Error', 'Completa correo y contraseña');
       return;
     }
 
     setLoading(true);
     try {
-      await AsyncStorage.setItem('@auth_token', 'demo-token');
-      await AsyncStorage.setItem('@user_rol', user.rol);
-      await AsyncStorage.setItem('@user_nombre', user.nombre);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error) {
+        Alert.alert('Error', 'Correo o contraseña incorrectos');
+        return;
+      }
+
+      // Traer el perfil para saber el rol (cliente / picker)
+      const { data: perfil, error: perfilError } = await supabase
+        .from('perfiles')
+        .select('rol, nombre')
+        .eq('id', data.user.id)
+        .single();
+
+      if (perfilError || !perfil) {
+        Alert.alert('Error', 'No se pudo cargar tu perfil');
+        return;
+      }
 
       setModalVisible(false);
-      if (user.rol === 'cliente') router.replace('/(tabs)');
-      if (user.rol === 'picker') router.replace('/picker');
+      setEmail('');
+      setPassword('');
+
+      if (perfil.rol === 'cliente') router.replace('/(tabs)');
+      if (perfil.rol === 'picker') router.replace('/picker');
     } catch (err) {
       Alert.alert('Error', 'No se pudo iniciar sesión');
     } finally {
@@ -65,7 +77,6 @@ export default function LoginScreen() {
     >
       <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}>
-          {/* Logo circular */}
           <View style={styles.logoCircle}>
             <Text style={styles.logoText}>S</Text>
           </View>
@@ -74,16 +85,13 @@ export default function LoginScreen() {
           <Text style={styles.appName}>Super Oferta!</Text>
 
           <View style={styles.buttons}>
-            <TouchableOpacity
-              style={styles.btnPrimary}
-              onPress={() => setModalVisible(true)}
-            >
+            <TouchableOpacity style={styles.btnPrimary} onPress={() => setModalVisible(true)}>
               <Text style={styles.btnPrimaryText}>Iniciar sesión</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.btnSecondary}
-              onPress={() => Alert.alert('Próximamente', 'Registro en construcción')}
+              onPress={() => router.push('/register')}
             >
               <Text style={styles.btnSecondaryText}>Crear cuenta</Text>
             </TouchableOpacity>
@@ -95,7 +103,6 @@ export default function LoginScreen() {
         </View>
       </SafeAreaView>
 
-      {/* Modal de login */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -133,17 +140,10 @@ export default function LoginScreen() {
               onPress={handleLogin}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.btnPrimaryText}>Entrar</Text>
-              )}
+              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Entrar</Text>}
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.btnSecondary}
-              onPress={() => setModalVisible(false)}
-            >
+            <TouchableOpacity style={styles.btnSecondary} onPress={() => setModalVisible(false)}>
               <Text style={styles.btnSecondaryText}>Cancelar</Text>
             </TouchableOpacity>
           </View>
@@ -156,7 +156,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   bg: { flex: 1 },
   safe: { flex: 1, justifyContent: 'flex-end' },
-
   sheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 32,
@@ -175,44 +174,20 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: '#fff',
   },
   logoText: { fontSize: 32, fontWeight: '900', color: '#fff' },
-
   welcome: { fontSize: 16, color: '#555', marginTop: 8, textAlign: 'center' },
   appName: { fontSize: 24, fontWeight: '900', color: '#1a1a1a', marginBottom: 28, textAlign: 'center' },
-
   buttons: { width: '100%', gap: 12 },
-
-  btnPrimary: {
-    backgroundColor: PRIMARY,
-    borderRadius: 14, paddingVertical: 16,
-    alignItems: 'center', width: '100%',
-  },
+  btnPrimary: { backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 16, alignItems: 'center', width: '100%' },
   btnPrimaryText: { fontSize: 16, fontWeight: '800', color: '#fff' },
-
-  btnSecondary: {
-    borderRadius: 14, paddingVertical: 15,
-    alignItems: 'center', width: '100%',
-    borderWidth: 2, borderColor: PRIMARY,
-  },
+  btnSecondary: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', width: '100%', borderWidth: 2, borderColor: PRIMARY },
   btnSecondaryText: { fontSize: 16, fontWeight: '700', color: PRIMARY },
-
   skipText: { fontSize: 14, color: PRIMARY, fontWeight: '600', textAlign: 'center', paddingVertical: 8 },
-
-  // Modal
-  modalOverlay: {
-    flex: 1, justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  modalSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24, gap: 12,
-  },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, gap: 12 },
   modalTitle: { fontSize: 22, fontWeight: '900', color: '#1a1a1a' },
   modalSubtitle: { fontSize: 14, color: '#888', marginBottom: 4 },
-
   input: {
-    borderWidth: 1.5, borderColor: '#e0e0e0',
-    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 15, color: '#1a1a1a', backgroundColor: '#fafafa',
+    borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: '#1a1a1a', backgroundColor: '#fafafa',
   },
 });
