@@ -2,10 +2,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Image, ScrollView, StyleSheet, Text,
+  ActivityIndicator,
+  Image, ScrollView, StyleSheet, Text,
   TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
@@ -43,6 +45,7 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
   const [agregando, setAgregando] = useState(false);
+  const [alertConfig, setAlertConfig] = useState(null);
   const [cartCount, setCartCount] = useState(0);
   const insets = useSafeAreaInsets();
 
@@ -82,20 +85,39 @@ export default function ProductDetail() {
   useEffect(() => {
     const cargarProducto = async () => {
       setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('id_sucursal_preferida')
+        .eq('id', user.id)
+        .single();
+
+      if (!perfil?.id_sucursal_preferida) {
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
-        .from('productos')
-        .select('*')
-        .eq('id', id)
+        .from('producto_sucursal')
+        .select('precio, stock, productos!inner (id, nombre, descripcion, imagen_url)')
+        .eq('id_producto', id)
+        .eq('id_sucursal', perfil.id_sucursal_preferida)
         .single();
 
       if (!error && data) {
         setProduct({
-          id: data.id,
-          name: data.nombre,
-          description: data.descripcion,
-          price: data.precio ?? 0,
+          id: data.productos.id,
+          name: data.productos.nombre,
+          description: data.productos.descripcion,
+          price: Math.round(data.precio ?? 0),
           original_price: null,
-          image_url: data.imagen_url,
+          image_url: data.productos.imagen_url,
           stock: data.stock ?? 0,
           unit: '',
           tags: [],
@@ -113,8 +135,18 @@ export default function ProductDetail() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      router.push('/login');
       setAgregando(false);
+      setAlertConfig({
+        icon: 'lock-closed',
+        iconColor: PRIMARY,
+        title: 'Inicia sesión',
+        message: 'Inicia sesión antes de agregar productos al carrito',
+        buttonText: 'Ir a iniciar sesión',
+        onPress: () => {
+          setAlertConfig(null);
+          router.push('/login');
+        },
+      });
       return;
     }
 
@@ -161,11 +193,21 @@ export default function ProductDetail() {
     await cargarCartCount();
     setAgregando(false);
 
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace('/(tabs)');
-    }
+    setAlertConfig({
+      icon: 'checkmark-circle',
+      iconColor: '#1B6B3A',
+      title: '¡Listo!',
+      message: 'Se ha agregado correctamente al carrito',
+      buttonText: 'Continuar',
+      onPress: () => {
+        setAlertConfig(null);
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)');
+        }
+      },
+    });
   };
 
   if (loading) {
@@ -312,6 +354,16 @@ export default function ProductDetail() {
           )}
         </TouchableOpacity>
       </View>
+
+      <CustomAlert
+        visible={!!alertConfig}
+        icon={alertConfig?.icon}
+        iconColor={alertConfig?.iconColor}
+        title={alertConfig?.title}
+        message={alertConfig?.message}
+        buttonText={alertConfig?.buttonText}
+        onPress={alertConfig?.onPress}
+      />
     </SafeAreaView>
   );
 }

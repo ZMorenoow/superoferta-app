@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router'; // ← ambos desde aquí ahora
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,12 +9,12 @@ import { supabase } from '../../utils/supabase';
 const PRIMARY = '#C21807';
 
 const MENU_ITEMS = [
-  { icon: 'receipt-outline', label: 'Mis pedidos', arrow: true },
-  { icon: 'heart-outline', label: 'Favoritos', arrow: true },
-  { icon: 'location-outline', label: 'Mis direcciones', arrow: true },
-  { icon: 'card-outline', label: 'Métodos de pago', arrow: true },
-  { icon: 'notifications-outline', label: 'Notificaciones', arrow: true },
-  { icon: 'help-circle-outline', label: 'Ayuda', arrow: true },
+  { icon: 'receipt-outline', label: 'Mis pedidos', route: '/mis_pedidos' },
+  { icon: 'heart-outline', label: 'Favoritos', route: '/favoritos' },
+  { icon: 'location-outline', label: 'Mis direcciones', route: '/mis-direcciones' },
+  { icon: 'card-outline', label: 'Métodos de pago', route: '/metodos-pago' },
+  { icon: 'notifications-outline', label: 'Notificaciones', route: '/notificaciones' },
+  { icon: 'help-circle-outline', label: 'Ayuda', route: '/ayuda' },
 ];
 
 export default function PerfilScreen() {
@@ -22,6 +22,7 @@ export default function PerfilScreen() {
   const { handleScroll } = useTabBar();
   const [perfil, setPerfil] = useState(null);
   const [email, setEmail] = useState('');
+  const [sucursal, setSucursal] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const cargarPerfil = useCallback(async () => {
@@ -37,17 +38,17 @@ export default function PerfilScreen() {
 
     const { data, error } = await supabase
       .from('perfiles')
-      .select('nombre, apellido')
+      .select('nombre, apellido, sucursales(nombre)')
       .eq('id', user.id)
       .single();
 
     if (!error && data) {
       setPerfil(data);
+      setSucursal(data.sucursales?.nombre ?? null);
     }
     setLoading(false);
   }, []);
 
-  // Recarga cada vez que vuelves a esta pestaña (por si el nombre cambió)
   useFocusEffect(
     useCallback(() => {
       cargarPerfil();
@@ -83,6 +84,12 @@ export default function PerfilScreen() {
             <>
               <Text style={styles.userName}>{nombreCompleto}</Text>
               <Text style={styles.userEmail}>{email}</Text>
+              {sucursal && (
+                <View style={styles.sucursalBadge}>
+                  <Ionicons name="storefront-outline" size={14} color={PRIMARY} />
+                  <Text style={styles.sucursalText}>{sucursal}</Text>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -92,6 +99,7 @@ export default function PerfilScreen() {
             <TouchableOpacity
               key={i}
               style={[styles.menuItem, i < MENU_ITEMS.length - 1 && styles.menuItemBorder]}
+              onPress={() => router.push(item.route)}
             >
               <View style={styles.menuLeft}>
                 <View style={styles.menuIconBox}>
@@ -127,6 +135,12 @@ const styles = StyleSheet.create({
   },
   userName: { fontSize: 20, fontWeight: '800', color: '#1a1a1a' },
   userEmail: { fontSize: 13, color: '#888', marginTop: 2 },
+  sucursalBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#fdecea', paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 20, marginTop: 10,
+  },
+  sucursalText: { fontSize: 12, fontWeight: '700', color: PRIMARY },
   menuCard: {
     backgroundColor: '#fff', marginHorizontal: 16,
     borderRadius: 16, overflow: 'hidden',

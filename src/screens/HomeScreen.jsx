@@ -182,16 +182,46 @@ export default function HomeScreen() {
   const fetchProducts = useCallback(async (cat = activeCategory, q = search) => {
     setLoading(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      let idSucursal = null;
+
+      if (user) {
+        const { data: perfil } = await supabase
+          .from('perfiles')
+          .select('id_sucursal_preferida')
+          .eq('id', user.id)
+          .single();
+        idSucursal = perfil?.id_sucursal_preferida;
+      }
+
+      if (!idSucursal) {
+        // Invitado o sin sucursal asignada → usar una por defecto
+        const { data: sucursalDefault } = await supabase
+          .from('sucursales')
+          .select('id')
+          .eq('nombre', 'Super Oferta Los Pablos')
+          .single();
+        idSucursal = sucursalDefault?.id;
+      }
+
+      if (!idSucursal) {
+        setProducts([]);
+        return;
+      }
+
       let query = supabase
-        .from('productos')
-        .select('*')
-        .eq('activo', true);
+        .from('producto_sucursal')
+        .select('precio, stock, id_producto, productos!inner (id, nombre, imagen_url, id_categoria, activo)')
+        .eq('id_sucursal', idSucursal)
+        .eq('activo', true)
+        .eq('productos.activo', true);
 
       if (cat !== 'all') {
-        query = query.eq('id_categoria', cat);
+        query = query.eq('productos.id_categoria', cat);
       }
       if (q) {
-        query = query.ilike('nombre', `%${q}%`);
+        query = query.ilike('productos.nombre', `%${q}%`);
       }
 
       const { data, error } = await query;
@@ -201,13 +231,13 @@ export default function HomeScreen() {
         setProducts([]);
       } else {
         setProducts(
-          (data || []).map((p) => ({
-            id: p.id,
-            name: p.nombre,
-            price: p.precio ?? 0,
+          (data || []).map((ps) => ({
+            id: ps.productos.id,
+            name: ps.productos.nombre,
+            price: Math.round(ps.precio ?? 0),
             original_price: null,
-            image_url: p.imagen_url,
-            stock: p.stock,
+            image_url: ps.productos.imagen_url,
+            stock: ps.stock,
             unit: '',
           }))
         );
