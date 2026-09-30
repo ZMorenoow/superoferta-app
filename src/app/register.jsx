@@ -37,6 +37,7 @@ export default function RegisterScreen() {
   // Sucursal
   const [sucursales, setSucursales] = useState([]);
   const [sucursalSeleccionada, setSucursalSeleccionada] = useState(null);
+  const [dropdownAbierto, setDropdownAbierto] = useState(false);
 
   // Dirección
   const [nombreDireccion, setNombreDireccion] = useState('Casa');
@@ -63,6 +64,10 @@ export default function RegisterScreen() {
     cargarSucursales();
   }, []);
 
+  const sucursalActual = sucursales.find(
+    (s) => s.id === sucursalSeleccionada
+  );
+
   const handleRegister = async () => {
     // Validación de datos personales
     if (
@@ -72,44 +77,32 @@ export default function RegisterScreen() {
       !password ||
       !confirmPassword
     ) {
-      Alert.alert(
-        'Error',
-        'Completa todos los campos obligatorios'
-      );
+      Alert.alert('Error', 'Completa todos los campos obligatorios');
       return;
     }
 
     // Validación de sucursal
     if (!sucursalSeleccionada) {
-      Alert.alert(
-        'Error',
-        'Selecciona tu Super Oferta de preferencia'
-      );
+      Alert.alert('Error', 'Selecciona tu Super Oferta de preferencia');
       return;
     }
 
     // Validación de dirección
     if (!direccion.trim() || !ciudad.trim()) {
-      Alert.alert(
-        'Error',
-        'Completa tu dirección y ciudad'
-      );
+      Alert.alert('Error', 'Completa tu dirección y ciudad');
       return;
     }
 
     // Validación de contraseña
     if (password !== confirmPassword) {
-      Alert.alert(
-        'Error',
-        'Las contraseñas no coinciden'
-      );
+      Alert.alert('Error', 'Las contraseñas no coinciden');
       return;
     }
 
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: correo.trim().toLowerCase(),
         password,
 
@@ -148,11 +141,7 @@ export default function RegisterScreen() {
       );
     } catch (err) {
       console.error(err);
-
-      Alert.alert(
-        'Error',
-        'Hubo un error al registrar el usuario'
-      );
+      Alert.alert('Error', 'Hubo un error al registrar el usuario');
     } finally {
       setLoading(false);
     }
@@ -169,9 +158,7 @@ export default function RegisterScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.title}>
-            Registro de usuario
-          </Text>
+          <Text style={styles.title}>Registro de usuario</Text>
 
           {/* =========================
               DATOS PERSONALES
@@ -235,9 +222,7 @@ export default function RegisterScreen() {
               DIRECCIÓN
           ========================== */}
 
-          <Text style={styles.sectionTitle}>
-            Dirección
-          </Text>
+          <Text style={styles.sectionTitle}>Dirección</Text>
 
           <TextInput
             style={styles.input}
@@ -281,38 +266,68 @@ export default function RegisterScreen() {
           />
 
           {/* =========================
-              SUCURSAL PREFERIDA
+              SUCURSAL PREFERIDA (DROPDOWN)
           ========================== */}
 
-          <Text style={styles.label}>
-            Tu Super Oferta de preferencia
-          </Text>
+          <Text style={styles.label}>Tu Super Oferta de preferencia</Text>
 
-          <View style={styles.sucursalList}>
-            {sucursales.map((s) => (
-              <TouchableOpacity
-                key={s.id}
-                style={[
-                  styles.sucursalItem,
-                  sucursalSeleccionada === s.id &&
-                    styles.sucursalItemActive,
-                ]}
-                onPress={() =>
-                  setSucursalSeleccionada(s.id)
-                }
+          <TouchableOpacity
+            style={[
+              styles.dropdown,
+              dropdownAbierto && styles.dropdownAbierto,
+            ]}
+            onPress={() => setDropdownAbierto(!dropdownAbierto)}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={
+                sucursalActual
+                  ? styles.dropdownText
+                  : styles.dropdownPlaceholder
+              }
+            >
+              {sucursalActual
+                ? sucursalActual.nombre
+                : 'Selecciona una sucursal'}
+            </Text>
+            <Text style={styles.dropdownArrow}>
+              {dropdownAbierto ? '▲' : '▼'}
+            </Text>
+          </TouchableOpacity>
+
+          {dropdownAbierto && (
+            <View style={styles.dropdownList}>
+              <ScrollView
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
               >
-                <Text
-                  style={[
-                    styles.sucursalText,
-                    sucursalSeleccionada === s.id &&
-                      styles.sucursalTextActive,
-                  ]}
-                >
-                  {s.nombre}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                {sucursales.map((s) => (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[
+                      styles.dropdownItem,
+                      sucursalSeleccionada === s.id &&
+                        styles.dropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      setSucursalSeleccionada(s.id);
+                      setDropdownAbierto(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.sucursalText,
+                        sucursalSeleccionada === s.id &&
+                          styles.sucursalTextActive,
+                      ]}
+                    >
+                      {s.nombre}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           {/* =========================
               REGISTRAR
@@ -326,15 +341,11 @@ export default function RegisterScreen() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.btnPrimaryText}>
-                Registrar
-              </Text>
+              <Text style={styles.btnPrimaryText}>Registrar</Text>
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => router.replace('/login')}
-          >
+          <TouchableOpacity onPress={() => router.replace('/login')}>
             <Text style={styles.link}>
               ¿Ya tienes una cuenta? Inicia sesión
             </Text>
@@ -390,12 +401,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  sucursalList: {
-    gap: 8,
-    marginBottom: 8,
-  },
-
-  sucursalItem: {
+  // Dropdown
+  dropdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: '#e0e0e0',
     borderRadius: 12,
@@ -404,8 +414,45 @@ const styles = StyleSheet.create({
     backgroundColor: '#fafafa',
   },
 
-  sucursalItemActive: {
+  dropdownAbierto: {
     borderColor: PRIMARY,
+  },
+
+  dropdownText: {
+    fontSize: 15,
+    color: '#1a1a1a',
+    flex: 1,
+  },
+
+  dropdownPlaceholder: {
+    fontSize: 15,
+    color: '#aaa',
+    flex: 1,
+  },
+
+  dropdownArrow: {
+    fontSize: 12,
+    color: '#888',
+    marginLeft: 8,
+  },
+
+  dropdownList: {
+    borderWidth: 1.5,
+    borderColor: '#e0e0e0',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    maxHeight: 200,
+    overflow: 'hidden',
+  },
+
+  dropdownItem: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+
+  dropdownItemActive: {
     backgroundColor: '#fdecea',
   },
 

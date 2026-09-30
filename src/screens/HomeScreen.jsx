@@ -359,7 +359,6 @@ export default function HomeScreen() {
       onCategoryChange={handleCategoryChange}
     />
   ), [activeCategory, cartCount]);
-
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.searchContainer}>
@@ -414,6 +413,8 @@ export default function HomeScreen() {
       )}
     </SafeAreaView>
   );
+
+  
 }
 
 const styles = StyleSheet.create({
