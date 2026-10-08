@@ -13,19 +13,6 @@ Una app de delivery de supermercado donde los clientes arman su compra y los pic
 
 </div>
 
----
-
-## 🎬 Demo
-
-<!-- Reemplaza estas rutas por tus capturas o un GIF -->
-<div align="center">
-  <img src="assets/demo/home.png" width="220" alt="Inicio" />
-  <img src="assets/demo/cart.png" width="220" alt="Carrito" />
-  <img src="assets/demo/picker.png" width="220" alt="Vista picker" />
-</div>
-
----
-
 ## 🧰 Stack
 
 <div align="center">
