@@ -1,56 +1,51 @@
-# Welcome to your Expo app 👋
+<div align="center">
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+# 🛒 Super Ofertas
 
-## Get started
+**Tu supermercado, a un toque de distancia.**
 
-1. Install dependencies
+Una app de delivery de supermercado donde los clientes arman su compra y los pickers la preparan, todo en la misma aplicación.
 
-   ```bash
-   npm install
-   ```
+![Expo](https://img.shields.io/badge/Expo-SDK_54-000020?style=for-the-badge&logo=expo&logoColor=white)
+![React Native](https://img.shields.io/badge/React_Native-0.81-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
+![License](https://img.shields.io/badge/Licencia-MIT-C21807?style=for-the-badge)
 
-2. Start the app
+</div>
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## 🎬 Demo
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+<!-- Reemplaza estas rutas por tus capturas o un GIF -->
+<div align="center">
+  <img src="assets/demo/home.png" width="220" alt="Inicio" />
+  <img src="assets/demo/cart.png" width="220" alt="Carrito" />
+  <img src="assets/demo/picker.png" width="220" alt="Vista picker" />
+</div>
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+---
 
-## Get a fresh project
+## 🧰 Stack
 
-When you're ready, run:
+<div align="center">
 
-```bash
-npm run reset-project
-```
+![Expo](https://img.shields.io/badge/Expo-000020?style=flat-square&logo=expo&logoColor=white)
+![React Native](https://img.shields.io/badge/React_Native-61DAFB?style=flat-square&logo=react&logoColor=black)
+![React](https://img.shields.io/badge/React_19-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Zustand](https://img.shields.io/badge/Zustand-433E38?style=flat-square)
+![Axios](https://img.shields.io/badge/Axios-5A29E4?style=flat-square&logo=axios&logoColor=white)
+![Reanimated](https://img.shields.io/badge/Reanimated_4-001A72?style=flat-square&logo=react&logoColor=white)
+![EAS](https://img.shields.io/badge/EAS_Build-4630EB?style=flat-square&logo=expo&logoColor=white)
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+</div>
 
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+| | Tecnología | Para qué |
+| :-: | --- | --- |
+| 📱 | **Expo SDK 54** · React Native 0.81 · React 19 | Base de la app |
+| 🧭 | **Expo Router 6** | Navegación basada en archivos |
+| 🧠 | **Zustand** | Estado global |
+| 🌐 | **Axios** | Comunicación con el servidor |
+| ✨ | **Reanimated 4** · Gesture Handler | Animaciones y gestos |
+| 🚀 | **EAS Build** | Generación de builds Android |
