@@ -11,7 +11,6 @@ Una app de delivery de supermercado donde los clientes arman su compra y los pic
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=apple&logoColor=white)
-![License](https://img.shields.io/badge/Licencia-MIT-C21807?style=for-the-badge)
 
 </div>
 
