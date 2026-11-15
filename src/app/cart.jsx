@@ -69,15 +69,39 @@ export default function CarritoScreen() {
       return;
     }
 
+    // Sucursal elegida por el cliente
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('id_sucursal_preferida')
+      .eq('id', user.id)
+      .single();
+
+    // Precio y stock reales de esa sucursal
+    let porProducto = {};
+    const ids = (carritoItems || []).map((ci) => ci.id_producto);
+    if (perfil?.id_sucursal_preferida && ids.length > 0) {
+      const { data: ps } = await supabase
+        .from('producto_sucursal')
+        .select('id_producto, precio, stock')
+        .eq('id_sucursal', perfil.id_sucursal_preferida)
+        .eq('activo', true)
+        .in('id_producto', ids);
+      porProducto = Object.fromEntries((ps || []).map((p) => [p.id_producto, p]));
+    }
+
     setItems(
-      (carritoItems || []).map((ci) => ({
-        id: ci.id,
-        productoId: ci.id_producto,
-        nombre: ci.productos?.nombre ?? 'Producto',
-        imagen: ci.productos?.imagen_url,
-        precio: ci.precio_unitario,
-        cantidad: ci.cantidad,
-      }))
+      (carritoItems || []).map((ci) => {
+        const real = porProducto[ci.id_producto];
+        return {
+          id: ci.id,
+          productoId: ci.id_producto,
+          nombre: ci.productos?.nombre ?? 'Producto',
+          imagen: ci.productos?.imagen_url,
+          precio: real?.precio ?? ci.precio_unitario, // precio de la sucursal
+          stock: real?.stock ?? 0,
+          cantidad: ci.cantidad,
+        };
+      })
     );
     setLoading(false);
   }, []);
@@ -93,6 +117,12 @@ export default function CarritoScreen() {
     if (!item) return;
 
     const nuevaCantidad = item.cantidad + delta;
+
+    // No subir más allá del stock de la sucursal
+    if (delta > 0 && nuevaCantidad > item.stock) {
+      Alert.alert('Sin stock', `Solo quedan ${item.stock} unidades disponibles`);
+      return;
+    }
 
     if (nuevaCantidad <= 0) {
       const { error } = await supabase.from('carrito_items').delete().eq('id', itemId);
@@ -140,55 +170,44 @@ export default function CarritoScreen() {
     ]);
   };
 
+  // 1) El servidor crea el pedido desde el carrito (con el total calculado allá).
+  // 2) webpay-create inicia el pago en Transbank.
+  // 3) Se abre la pantalla con el WebView de Webpay.
+  // El carrito se vacía recién cuando el pago queda confirmado (en order-status).
   const confirmarPedido = async () => {
-    if (items.length === 0) return;
+    if (items.length === 0 || confirmando) return;
     setConfirmando(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const { data: pedidoId, error: pedidoError } = await supabase.rpc(
+        'crear_pedido_desde_carrito'
+      );
+      if (pedidoError) throw pedidoError;
 
-    const { data: carrito } = await supabase
-      .from('carrito')
-      .select('id')
-      .eq('id_cliente', user.id)
-      .single();
+      const { data: pago, error: pagoError } = await supabase.functions.invoke(
+        'webpay-create',
+        { body: { id_pedido: pedidoId } }
+      );
+      if (pagoError || !pago?.url || !pago?.token) {
+        throw pagoError ?? new Error('Respuesta de pago incompleta');
+      }
 
-    const { data: pedido, error: pedidoError } = await supabase
-      .from('pedidos')
-      .insert({
-        id_cliente: user.id,
-        estado: 'pendiente',
-        total,
-      })
-      .select('id')
-      .single();
-
-    if (pedidoError) {
-      Alert.alert('Error', 'No se pudo crear el pedido');
+      router.push({
+        pathname: '/pago-webpay',
+        params: { url: pago.url, token: pago.token, pedido: pedidoId },
+      });
+    } catch (e) {
+      console.error('Error al iniciar el pago', e);
+      // Mensajes del servidor que sí conviene mostrar tal cual (sin stock, sin sucursal, etc.).
+      const mensajesVisibles = ['Stock insuficiente', 'Producto no disponible', 'Elige tu sucursal'];
+      const mostrar = mensajesVisibles.some((m) => e?.message?.startsWith(m));
+      Alert.alert(
+        'No se pudo continuar',
+        mostrar ? e.message : 'No se pudo iniciar el pago. Intenta de nuevo.'
+      );
+    } finally {
       setConfirmando(false);
-      return;
     }
-
-    const pedidoItems = items.map((item) => ({
-      id_pedido: pedido.id,
-      id_producto: item.productoId,
-      cantidad: item.cantidad,
-      precio_unitario: item.precio,
-    }));
-
-    const { error: itemsError } = await supabase.from('pedido_items').insert(pedidoItems);
-
-    if (itemsError) {
-      Alert.alert('Error', 'El pedido se creó, pero no se pudieron guardar los productos');
-      setConfirmando(false);
-      return;
-    }
-
-    const ids = items.map((i) => i.id);
-    await supabase.from('carrito_items').delete().in('id', ids);
-
-    setItems([]);
-    setConfirmando(false);
-    Alert.alert('Pedido', '¡Pedido confirmado! 🎉');
   };
 
   const subtotal = items.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
@@ -291,7 +310,7 @@ export default function CarritoScreen() {
           {confirmando ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.btnConfirmarText}>Confirmar pedido</Text>
+            <Text style={styles.btnConfirmarText}>Pagar con Webpay</Text>
           )}
         </TouchableOpacity>
       </View>

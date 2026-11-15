@@ -2,20 +2,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
+const VERDE = '#1B6B3A';
+
+// Solo se muestran pedidos reales. Los intentos de pago abandonados
+// (pendiente / cancelado) quedan guardados en la base de datos pero no se muestran.
+const ESTADOS_VISIBLES = ['pagado', 'asignado', 'en_proceso', 'completado'];
 
 export default function MisPedidosScreen() {
   const router = useRouter();
@@ -45,6 +50,7 @@ export default function MisPedidosScreen() {
           total,
           direccion_entrega,
           notas,
+          codigo_retiro,
           created_at,
           pedido_items (
             id,
@@ -58,6 +64,7 @@ export default function MisPedidosScreen() {
           )
         `)
         .eq('id_cliente', user.id)
+        .in('estado', ESTADOS_VISIBLES)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -123,35 +130,33 @@ export default function MisPedidosScreen() {
           fondo: '#FEF3C7',
         };
 
-      case 'confirmado':
+      case 'pagado':
         return {
-          texto: 'Confirmado',
+          texto: 'Pagado',
           icono: 'checkmark-circle-outline',
+          color: '#16A34A',
+          fondo: '#DCFCE7',
+        };
+
+      case 'asignado':
+        return {
+          texto: 'Asignado',
+          icono: 'person-outline',
           color: '#2563EB',
           fondo: '#DBEAFE',
         };
 
-      case 'preparando':
-      case 'preparación':
+      case 'en_proceso':
         return {
-          texto: 'Preparando',
-          icono: 'restaurant-outline',
+          texto: 'En preparación',
+          icono: 'basket-outline',
           color: '#7C3AED',
           fondo: '#EDE9FE',
         };
 
-      case 'en camino':
-      case 'en_camino':
+      case 'completado':
         return {
-          texto: 'En camino',
-          icono: 'bicycle-outline',
-          color: '#0891B2',
-          fondo: '#CFFAFE',
-        };
-
-      case 'entregado':
-        return {
-          texto: 'Entregado',
+          texto: 'Completado',
           icono: 'checkmark-done-outline',
           color: '#16A34A',
           fondo: '#DCFCE7',
@@ -288,7 +293,7 @@ export default function MisPedidosScreen() {
 
                       <View style={styles.orderInfo}>
                         <Text style={styles.orderNumber}>
-                          Pedido #{pedido.id}
+                          Pedido #{String(pedido.id).slice(0, 8).toUpperCase()}
                         </Text>
 
                         <Text style={styles.orderDate}>
@@ -354,6 +359,25 @@ export default function MisPedidosScreen() {
                       {formatearPrecio(pedido.total)}
                     </Text>
                   </View>
+
+                  {/* CÓDIGO DE RETIRO */}
+                  {pedido.codigo_retiro ? (
+                    <View style={styles.retiroRow}>
+                      <View style={styles.retiroTextos}>
+                        <Text style={styles.retiroLabel}>
+                          Código de retiro
+                        </Text>
+
+                        <Text style={styles.retiroHint}>
+                          Muéstralo en la sucursal
+                        </Text>
+                      </View>
+
+                      <Text style={styles.retiroCodigo}>
+                        {pedido.codigo_retiro}
+                      </Text>
+                    </View>
+                  ) : null}
 
                   {/* DETALLE */}
                   {estaExpandido && (
@@ -691,6 +715,45 @@ const styles = StyleSheet.create({
     fontSize: 17,
     color: PRIMARY,
     fontWeight: '800',
+  },
+
+  retiroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: VERDE,
+    backgroundColor: '#F0FFF4',
+  },
+
+  retiroTextos: {
+    flex: 1,
+    paddingRight: 10,
+  },
+
+  retiroLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: VERDE,
+  },
+
+  retiroHint: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 2,
+  },
+
+  retiroCodigo: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#1a1a1a',
+    letterSpacing: 4,
   },
 
   details: {

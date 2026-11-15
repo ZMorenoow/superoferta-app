@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
+
 
 const PRIMARY = '#C21807';
 
@@ -60,9 +62,16 @@ export default function LoginScreen() {
       setEmail('');
       setPassword('');
 
-      if (perfil.rol === 'cliente') router.replace('/(tabs)');
-      if (perfil.rol === 'picker') router.replace('/picker');
+      // Guardar el rol no debe romper el login si el almacenamiento falla.
+      try {
+        await AsyncStorage.setItem('@rol', perfil.rol);
+      } catch (e) {
+        console.warn('No se pudo guardar el rol', e);
+      }
+
+      router.replace(perfil.rol === 'picker' ? '/picker' : '/(tabs)');
     } catch (err) {
+      console.error('Error en el login', err);
       Alert.alert('Error', 'No se pudo iniciar sesión');
     } finally {
       setLoading(false);

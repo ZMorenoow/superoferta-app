@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,10 +17,11 @@ const TABS = [
   { name: 'perfil',     title: 'Perfil',     icon: 'person-outline',   iconActive: 'person' },
 ];
 
-function AnimatedTabBar({ state, descriptors, navigation }) {
+function AnimatedTabBar({ state }) {
   const animations = useRef(TABS.map(() => new Animated.Value(1))).current;
   const { translateY } = useTabBar();
-  const insents = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   const handlePress = (tabIndex, routeName, isFocused) => {
     Animated.sequence([
@@ -38,12 +39,12 @@ function AnimatedTabBar({ state, descriptors, navigation }) {
     ]).start();
 
     if (!isFocused) {
-      navigation.navigate(routeName);
+      router.navigate(routeName === 'index' ? '/' : `/${routeName}`);
     }
   };
 
   return (
-    <Animated.View style={[styles.tabBar, { bottom: BASE_BOTTOM + insents.bottom, transform : [{ translateY }] }]}>
+    <Animated.View style={[styles.tabBar, { bottom: BASE_BOTTOM + insets.bottom, transform: [{ translateY }] }]}>
       {state.routes.map((route) => {
         const tab = TABS.find((t) => t.name === route.name);
         if (!tab) return null;

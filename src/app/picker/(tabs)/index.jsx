@@ -1,131 +1,163 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  FlatList, StyleSheet, Text,
-  TouchableOpacity, View,
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../utils/supabase';
 
 const PRIMARY = '#C21807';
 
-const MOCK_PEDIDOS = [
-  {
-    id: 'P001',
-    cliente: 'Juan Pérez',
-    direccion: 'Av. caupolicán 5414',
-    hora: '14:30',
-    total: 18450,
-    estado: 'pendiente',
-    productos: [
-      { id: '1', name: 'Manzana Roja', unit: 'kg', price: 1490, quantity: 2, image_url: 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400', encontrado: null },
-      { id: '3', name: 'Leche Entera', unit: '1L', price: 990, quantity: 3, image_url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400', encontrado: null },
-      { id: '5', name: 'Brócoli', unit: 'unidad', price: 990, quantity: 1, image_url: 'https://images.unsplash.com/photo-1459411621453-7b03977f4bfc?w=400', encontrado: null },
-      { id: '6', name: 'Coca-Cola', unit: '1.5L', price: 1290, quantity: 2, image_url: 'https://images.unsplash.com/photo-1554866585-cd94860890b7?w=400', encontrado: null },
-      { id: '7', name: 'Plátano', unit: 'kg', price: 890, quantity: 1, image_url: 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400', encontrado: null },
-    ],
-  },
-  {
-    id: 'P002',
-    cliente: 'María González',
-    direccion: 'Las Heras 567',
-    hora: '15:00',
-    total: 12990,
-    estado: 'pendiente',
-    productos: [
-      { id: '2', name: 'Pechuga de Pollo', unit: 'kg', price: 4990, quantity: 1, image_url: 'https://images.unsplash.com/photo-1604503468506-a8da13d11d36?w=400', encontrado: null },
-      { id: '9', name: 'Queso Gouda', unit: '250g', price: 2490, quantity: 2, image_url: 'https://images.unsplash.com/photo-1486297678162-eb2a19b0a32d?w=400', encontrado: null },
-      { id: '4', name: 'Pan Marraqueta', unit: 'unidad', price: 150, quantity: 4, image_url: 'https://images.unsplash.com/photo-1549931319-a545dcf3bc7b?w=400', encontrado: null },
-    ],
-  },
-];
-
 const ESTADO_CONFIG = {
-  pendiente: { color: '#E67E22', bg: '#FFF3E0', label: 'Pendiente' },
-  en_proceso: { color: '#1B6B3A', bg: '#E8F5E9', label: 'En proceso' },
-  completado: { color: '#888', bg: '#f0f0f0', label: 'Completado' },
+  asignado: { color: '#2563EB', bg: '#DBEAFE', label: 'Por preparar' },
+  en_proceso: { color: '#7C3AED', bg: '#EDE9FE', label: 'En preparación' },
 };
+
+const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
 
 export default function PickerHome() {
   const router = useRouter();
   const [nombre, setNombre] = useState('Picker');
+  const [asignaciones, setAsignaciones] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-    useEffect(() => {
+  useEffect(() => {
     const cargarNombre = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data } = await supabase
         .from('perfiles')
         .select('nombre')
         .eq('id', user.id)
         .single();
-
       if (data?.nombre) setNombre(data.nombre);
     };
     cargarNombre();
   }, []);
 
+  const cargar = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+
+    // RLS ya limita esto a los pedidos asignados a este picker.
+    const { data, error } = await supabase
+      .from('pedido_picker')
+      .select(`
+        id,
+        estado,
+        fecha_asignacion,
+        pedidos (
+          id,
+          total,
+          direccion_entrega,
+          created_at,
+          pedido_items ( id, cantidad, cantidad_escaneada )
+        )
+      `)
+      .eq('id_picker', user.id)
+      .neq('estado', 'completado')
+      .order('fecha_asignacion', { ascending: true });
+
+    if (error) {
+      console.error('Error cargando pedidos del picker', error);
+    } else {
+      setAsignaciones((data || []).filter((a) => a.pedidos));
+    }
+    setLoading(false);
+    setRefreshing(false);
+  }, [router]);
+
+  // Se actualiza al volver a la pantalla y cada 30 s para ver pedidos nuevos.
+  useFocusEffect(
+    useCallback(() => {
+      cargar();
+      const t = setInterval(cargar, 30000);
+      return () => clearInterval(t);
+    }, [cargar])
+  );
+
+  const totalUnidades = asignaciones.reduce(
+    (s, a) => s + (a.pedidos.pedido_items || []).reduce((x, i) => x + i.cantidad, 0),
+    0
+  );
+  const totalDinero = asignaciones.reduce((s, a) => s + Number(a.pedidos.total || 0), 0);
+
   const renderPedido = ({ item }) => {
-    const estado = ESTADO_CONFIG[item.estado];
-    const progreso = item.productos.filter((p) => p.encontrado !== null).length;
+    const pedido = item.pedidos;
+    const items = pedido.pedido_items || [];
+    const estado = ESTADO_CONFIG[item.estado] ?? ESTADO_CONFIG.asignado;
+    const listos = items.filter((i) => (i.cantidad_escaneada || 0) >= i.cantidad).length;
+    const hora = new Date(pedido.created_at).toLocaleTimeString('es-CL', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
     return (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => router.push({ pathname: '/picker/pedido', params: { pedido: JSON.stringify(item) } })}
+        onPress={() => router.push({ pathname: '/picker/pedido', params: { id: pedido.id } })}
         activeOpacity={0.85}
       >
-        {/* Header del card */}
         <View style={styles.cardHeader}>
           <View>
-            <Text style={styles.pedidoId}>Pedido #{item.id}</Text>
-            <Text style={styles.clienteName}>{item.cliente}</Text>
+            <Text style={styles.pedidoId}>Pedido</Text>
+            <Text style={styles.clienteName}>
+              #{String(pedido.id).slice(0, 8).toUpperCase()}
+            </Text>
           </View>
           <View style={[styles.estadoBadge, { backgroundColor: estado.bg }]}>
             <Text style={[styles.estadoText, { color: estado.color }]}>{estado.label}</Text>
           </View>
         </View>
 
-        {/* Info */}
         <View style={styles.cardInfo}>
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={14} color="#888" />
-            <Text style={styles.infoText}>{item.direccion}</Text>
+            <Text style={styles.infoText}>{pedido.direccion_entrega || 'Retiro en tienda'}</Text>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={14} color="#888" />
-            <Text style={styles.infoText}>Retiro: {item.hora}</Text>
+            <Text style={styles.infoText}>Pagado a las {hora}</Text>
           </View>
           <View style={styles.infoRow}>
             <Ionicons name="cube-outline" size={14} color="#888" />
-            <Text style={styles.infoText}>{item.productos.length} productos</Text>
+            <Text style={styles.infoText}>
+              {items.length} {items.length === 1 ? 'producto' : 'productos'}
+            </Text>
           </View>
         </View>
 
-        {/* Progreso */}
         <View style={styles.progressContainer}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressLabel}>Progreso</Text>
-            <Text style={styles.progressCount}>{progreso}/{item.productos.length}</Text>
+            <Text style={styles.progressCount}>{listos}/{items.length}</Text>
           </View>
           <View style={styles.progressBar}>
             <View
               style={[
                 styles.progressFill,
-                { width: `${(progreso / item.productos.length) * 100}%` },
+                { width: `${items.length ? (listos / items.length) * 100 : 0}%` },
               ]}
             />
           </View>
         </View>
 
-        {/* Footer */}
         <View style={styles.cardFooter}>
-          <Text style={styles.totalText}>${item.total.toLocaleString('es-CL')}</Text>
+          <Text style={styles.totalText}>{formatCLP(pedido.total)}</Text>
           <View style={styles.startBtn}>
             <Text style={styles.startBtnText}>
-              {progreso > 0 ? 'Continuar' : 'Iniciar picking'}
+              {listos > 0 || item.estado === 'en_proceso' ? 'Continuar' : 'Iniciar picking'}
             </Text>
             <Ionicons name="chevron-forward" size={16} color={PRIMARY} />
           </View>
@@ -136,7 +168,6 @@ export default function PickerHome() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Hola, {nombre} 👋</Text>
@@ -145,41 +176,60 @@ export default function PickerHome() {
         <TouchableOpacity
           style={styles.logoutBtn}
           onPress={async () => {
-          await supabase.auth.signOut();
-          router.replace('/login');
-        }}
+            await supabase.auth.signOut();
+            router.replace('/login');
+          }}
         >
           <Ionicons name="log-out-outline" size={22} color="#888" />
         </TouchableOpacity>
       </View>
 
-      {/* Stats */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>{MOCK_PEDIDOS.length}</Text>
+          <Text style={styles.statNum}>{asignaciones.length}</Text>
           <Text style={styles.statLabel}>Pedidos</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>
-            {MOCK_PEDIDOS.reduce((s, p) => s + p.productos.length, 0)}
-          </Text>
-          <Text style={styles.statLabel}>Productos</Text>
+          <Text style={styles.statNum}>{totalUnidades}</Text>
+          <Text style={styles.statLabel}>Unidades</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNum}>
-            ${MOCK_PEDIDOS.reduce((s, p) => s + p.total, 0).toLocaleString('es-CL')}
-          </Text>
+          <Text style={styles.statNum}>{formatCLP(totalDinero)}</Text>
           <Text style={styles.statLabel}>Total</Text>
         </View>
       </View>
 
-      <FlatList
-        data={MOCK_PEDIDOS}
-        renderItem={renderPedido}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-      />
+      {loading ? (
+        <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={asignaciones}
+          renderItem={renderPedido}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                cargar();
+              }}
+              tintColor={PRIMARY}
+              colors={[PRIMARY]}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="checkmark-done-outline" size={64} color="#d8d8d8" />
+              <Text style={styles.emptyTitle}>No tienes pedidos pendientes</Text>
+              <Text style={styles.emptyText}>
+                Los pedidos pagados de tu sucursal aparecerán aquí.
+              </Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -194,10 +244,7 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 13, color: '#888' },
   title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a' },
   logoutBtn: { padding: 8 },
-  statsRow: {
-    flexDirection: 'row', paddingHorizontal: 16,
-    gap: 10, marginBottom: 16,
-  },
+  statsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 16 },
   statCard: {
     flex: 1, backgroundColor: '#fff', borderRadius: 14,
     padding: 14, alignItems: 'center',
@@ -208,8 +255,7 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
   list: { paddingHorizontal: 16, paddingBottom: 40 },
   card: {
-    backgroundColor: '#fff', borderRadius: 18,
-    padding: 18, marginBottom: 14,
+    backgroundColor: '#fff', borderRadius: 18, padding: 18, marginBottom: 14,
     shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
   },
@@ -219,29 +265,22 @@ const styles = StyleSheet.create({
   },
   pedidoId: { fontSize: 12, color: '#888', fontWeight: '600' },
   clienteName: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', marginTop: 2 },
-  estadoBadge: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
-  },
+  estadoBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   estadoText: { fontSize: 12, fontWeight: '700' },
   cardInfo: { gap: 6, marginBottom: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   infoText: { fontSize: 13, color: '#555' },
   progressContainer: { marginBottom: 16 },
-  progressHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6,
-  },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   progressLabel: { fontSize: 12, color: '#888' },
   progressCount: { fontSize: 12, fontWeight: '700', color: PRIMARY },
-  progressBar: {
-    height: 6, backgroundColor: '#f0f0f0', borderRadius: 3,
-  },
-  progressFill: {
-    height: 6, backgroundColor: PRIMARY, borderRadius: 3,
-  },
-  cardFooter: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
+  progressBar: { height: 6, backgroundColor: '#f0f0f0', borderRadius: 3 },
+  progressFill: { height: 6, backgroundColor: PRIMARY, borderRadius: 3 },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalText: { fontSize: 20, fontWeight: '800', color: '#1a1a1a' },
   startBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   startBtnText: { fontSize: 14, fontWeight: '700', color: PRIMARY },
+  empty: { alignItems: 'center', paddingTop: 70, paddingHorizontal: 30, gap: 8 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
+  emptyText: { fontSize: 14, color: '#aaa', textAlign: 'center' },
 });
