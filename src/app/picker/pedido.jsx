@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ScannerOverlay from '../../components/ScannerOverlay';
 import { supabase } from '../../utils/supabase';
 
 const PRIMARY = '#C21807';
@@ -34,6 +35,13 @@ const MOTIVOS = ['Sin stock', 'En mal estado', 'No lo encuentro'];
 
 export default function PedidoScreen() {
   const router = useRouter();
+
+  // Si no hay pantalla anterior (p. ej. recarga directa en esta ruta), va al inicio.
+  const volver = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/picker');
+  };
+
   const { id, pedido: pedidoParam } = useLocalSearchParams();
 
   // Acepta ?id=<uuid> o el parámetro "pedido" (JSON) que ya mandaba la lista.
@@ -264,7 +272,7 @@ export default function PedidoScreen() {
               return;
             }
             Alert.alert('Pedido completado', 'El pedido quedó listo para retiro.', [
-              { text: 'OK', onPress: () => router.back() },
+              { text: 'OK', onPress: () => volver() },
             ]);
           },
         },
@@ -349,7 +357,7 @@ export default function PedidoScreen() {
           <Text style={styles.vacioTexto}>
             Puede que ya esté completado o que no esté asignado a ti.
           </Text>
-          <TouchableOpacity style={styles.finalizarBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.finalizarBtn} onPress={() => volver()}>
             <Text style={styles.finalizarBtnText}>Volver</Text>
           </TouchableOpacity>
         </View>
@@ -360,7 +368,7 @@ export default function PedidoScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => volver()} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={24} color="#1a1a1a" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
@@ -434,34 +442,12 @@ export default function PedidoScreen() {
             }}
             onBarcodeScanned={alEscanear}
           />
-          <SafeAreaView style={styles.camaraOverlay} pointerEvents="box-none">
-            <View style={styles.camaraTop}>
-              <Text style={styles.camaraTitulo}>
-                {completados}/{items.length} productos listos
-              </Text>
-              <TouchableOpacity style={styles.camaraCerrar} onPress={() => setEscaneando(false)}>
-                <Ionicons name="close" size={26} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.camaraMarco} />
-            <View style={styles.camaraBottom}>
-              {feedback ? (
-                <View style={[styles.feedback, { backgroundColor: feedback.ok ? VERDE : PRIMARY }]}>
-                  <Ionicons
-                    name={feedback.ok ? 'checkmark-circle' : 'alert-circle'}
-                    size={20}
-                    color="#fff"
-                  />
-                  <Text style={styles.feedbackTexto}>{feedback.texto}</Text>
-                </View>
-              ) : (
-                <Text style={styles.camaraAyuda}>Apunta al código de barras del producto</Text>
-              )}
-              <TouchableOpacity style={styles.camaraListo} onPress={() => setEscaneando(false)}>
-                <Text style={styles.camaraListoTexto}>Listo</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
+          <ScannerOverlay
+            completados={completados}
+            total={items.length}
+            feedback={feedback}
+            onClose={() => setEscaneando(false)}
+          />
         </View>
       </Modal>
 
@@ -586,32 +572,6 @@ const styles = StyleSheet.create({
   },
   escanearTexto: { color: '#fff', fontSize: 15, fontWeight: '800' },
   camaraFondo: { flex: 1, backgroundColor: '#000' },
-  camaraOverlay: { flex: 1, justifyContent: 'space-between' },
-  camaraTop: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 8,
-  },
-  camaraTitulo: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  camaraCerrar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center',
-  },
-  camaraMarco: {
-    alignSelf: 'center', width: 280, height: 160, borderRadius: 18,
-    borderWidth: 3, borderColor: '#fff',
-  },
-  camaraBottom: { padding: 20, gap: 14, alignItems: 'center' },
-  camaraAyuda: { color: '#fff', fontSize: 14, textAlign: 'center' },
-  feedback: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16, alignSelf: 'stretch',
-  },
-  feedbackTexto: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1 },
-  camaraListo: {
-    backgroundColor: '#fff', borderRadius: 14, paddingVertical: 14, alignSelf: 'stretch',
-    alignItems: 'center',
-  },
-  camaraListoTexto: { color: PRIMARY, fontSize: 15, fontWeight: '800' },
   vacio: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
   vacioTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
   vacioTexto: { fontSize: 14, color: '#888', textAlign: 'center' },

@@ -187,29 +187,6 @@ export default function PickerPerfilScreen() {
         >
           <View style={styles.menuLeft}>
             <View style={styles.menuIcon}>
-              <Ionicons name="settings-outline" size={20} color={PRIMARY} />
-            </View>
-
-            <View>
-              <Text style={styles.menuTitle}>Configuración</Text>
-              <Text style={styles.menuSubtitle}>
-                Personaliza tu cuenta
-              </Text>
-            </View>
-          </View>
-
-          <Ionicons name="chevron-forward" size={19} color="#BDBDBD" />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          activeOpacity={0.7}
-          onPress={() => {}}
-        >
-          <View style={styles.menuLeft}>
-            <View style={styles.menuIcon}>
               <Ionicons
                 name="help-circle-outline"
                 size={20}
@@ -228,25 +205,6 @@ export default function PickerPerfilScreen() {
 
         <View style={styles.divider} />
 
-        {/* TEST SCANNER */}
-        <TouchableOpacity
-          style={styles.menuItem}
-          activeOpacity={0.7}
-          onPress={() => router.push('/test-scanner')}
-        >
-          <View style={styles.menuLeft}>
-            <View style={styles.menuIcon}>
-              <Ionicons name="scan-outline" size={20} color={PRIMARY} />
-            </View>
-
-            <View>
-              <Text style={styles.menuTitle}>Test scanner</Text>
-              <Text style={styles.menuSubtitle}>Probar el escáner</Text>
-            </View>
-          </View>
-
-          <Ionicons name="chevron-forward" size={19} color="#BDBDBD" />
-        </TouchableOpacity>
       </View>
 
       {/* CERRAR SESIÓN */}
