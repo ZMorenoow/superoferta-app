@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabBarProvider, useTabBar } from '../../context/TabBarContext';
-
 
 const PRIMARY = '#C21807';
 const BASE_BOTTOM = 24;
@@ -19,9 +18,14 @@ const TABS = [
 
 function AnimatedTabBar({ state }) {
   const animations = useRef(TABS.map(() => new Animated.Value(1))).current;
-  const { translateY } = useTabBar();
+  const { translateY, opacity, showTabBar } = useTabBar();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
+  // Al cambiar de pestaña, la barra siempre vuelve a aparecer
+  useEffect(() => {
+    showTabBar();
+  }, [state.index, showTabBar]);
 
   const handlePress = (tabIndex, routeName, isFocused) => {
     Animated.sequence([
@@ -44,7 +48,16 @@ function AnimatedTabBar({ state }) {
   };
 
   return (
-    <Animated.View style={[styles.tabBar, { bottom: BASE_BOTTOM + insets.bottom, transform: [{ translateY }] }]}>
+    <Animated.View
+      style={[
+        styles.tabBar,
+        {
+          bottom: BASE_BOTTOM + insets.bottom,
+          opacity,                        // se esfuma
+          transform: [{ translateY }],    // y baja fuera de pantalla
+        },
+      ]}
+    >
       {state.routes.map((route) => {
         const tab = TABS.find((t) => t.name === route.name);
         if (!tab) return null;

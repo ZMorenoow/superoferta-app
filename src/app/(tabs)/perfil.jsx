@@ -10,9 +10,7 @@ const PRIMARY = '#C21807';
 
 const MENU_ITEMS = [
   { icon: 'receipt-outline', label: 'Mis pedidos', route: '/mis_pedidos' },
-  { icon: 'heart-outline', label: 'Favoritos', route: '/favoritos' },
   { icon: 'location-outline', label: 'Mis direcciones', route: '/mis-direcciones' },
-  { icon: 'card-outline', label: 'Métodos de pago', route: '/metodos-pago' },
   { icon: 'notifications-outline', label: 'Notificaciones', route: '/notificaciones' },
   { icon: 'help-circle-outline', label: 'Ayuda', route: '/ayuda' },
 ];

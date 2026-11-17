@@ -7,9 +7,12 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -26,6 +29,8 @@ const normalizar = (c) => String(c ?? '').replace(/\D/g, '').replace(/^0+/, '');
 
 const PAUSA_TRAS_ESCANEO = 1200; // ms de espera después de cada escaneo
 const AUSENCIA_MINIMA = 1000;    // ms que el código debe desaparecer para contar otra vez
+
+const MOTIVOS = ['Sin stock', 'En mal estado', 'No lo encuentro'];
 
 export default function PedidoScreen() {
   const router = useRouter();
@@ -50,6 +55,11 @@ export default function PedidoScreen() {
   const ultimaLectura = useRef({ codigo: null, t: 0 });
   const [permiso, pedirPermiso] = useCameraPermissions();
 
+  // Reporte de producto faltante
+  const [faltante, setFaltante] = useState(null); // item seleccionado
+  const [motivo, setMotivo] = useState(MOTIVOS[0]);
+  const [sugerencia, setSugerencia] = useState('');
+
   const cargar = useCallback(async () => {
     if (!pedidoId) {
       setLoading(false);
@@ -68,6 +78,9 @@ export default function PedidoScreen() {
           cantidad,
           cantidad_escaneada,
           precio_unitario,
+          estado,
+          motivo_faltante,
+          sugerencia,
           productos ( nombre, imagen_url, codigo_barra )
         )
       `)
@@ -91,7 +104,10 @@ export default function PedidoScreen() {
   const items = pedido?.pedido_items ?? [];
   const recogidas = (i) => i.cantidad_escaneada || 0;
   const completo = (i) => recogidas(i) >= i.cantidad;
-  const completados = items.filter(completo).length;
+  const esFaltante = (i) => i.estado === 'faltante';
+  // Un producto está "resuelto" si se recogió completo o se reportó como faltante.
+  const resuelto = (i) => completo(i) || esFaltante(i);
+  const completados = items.filter(resuelto).length;
   const todoListo = items.length > 0 && completados === items.length;
   const pct = items.length ? Math.round((completados / items.length) * 100) : 0;
 
@@ -100,27 +116,6 @@ export default function PedidoScreen() {
     if (pedido?.estado !== 'asignado') return;
     const { error } = await supabase.rpc('avanzar_pedido', { p_pedido: pedidoId });
     if (error) throw error;
-  };
-
-  const cambiarCantidad = async (item, delta) => {
-    const nueva = Math.min(Math.max(recogidas(item) + delta, 0), item.cantidad);
-    if (nueva === recogidas(item) || trabajando) return;
-
-    setTrabajando(true);
-    try {
-      await asegurarEnProceso();
-      const { error } = await supabase.rpc('marcar_item', {
-        p_item: item.id,
-        p_cantidad: nueva,
-      });
-      if (error) throw error;
-      await cargar();
-    } catch (e) {
-      console.error(e);
-      Alert.alert('Error', 'No se pudo guardar el cambio. Intenta de nuevo.');
-    } finally {
-      setTrabajando(false);
-    }
   };
 
   const abrirEscaner = async () => {
@@ -177,6 +172,13 @@ export default function PedidoScreen() {
         setFeedback({ ok: false, texto: 'Este producto no está en el pedido' });
         return;
       }
+      if (esFaltante(item)) {
+        setFeedback({
+          ok: false,
+          texto: `${item.productos?.nombre} ya fue reportado como faltante`,
+        });
+        return;
+      }
       if (completo(item)) {
         setFeedback({
           ok: false,
@@ -209,41 +211,83 @@ export default function PedidoScreen() {
     }
   };
 
-  const productoNoEncontrado = (item) => {
-    Alert.alert(
-      'Producto no encontrado',
-      `No se puede completar el pedido sin "${item.productos?.nombre ?? 'el producto'}". ` +
-        'Avisa al encargado de la sucursal para resolverlo con el cliente.'
-    );
+  const abrirFaltante = (item) => {
+    setMotivo(MOTIVOS[0]);
+    setSugerencia('');
+    setFaltante(item);
+  };
+
+  const cerrarFaltante = () => {
+    if (trabajando) return;
+    setFaltante(null);
+  };
+
+  const enviarFaltante = async () => {
+    if (!faltante) return;
+    setTrabajando(true);
+    try {
+      await asegurarEnProceso();
+      const { error } = await supabase.rpc('reportar_faltante', {
+        p_item: faltante.id,
+        p_motivo: motivo,
+        p_sugerencia: sugerencia.trim() || null,
+      });
+      if (error) throw error;
+      setFaltante(null);
+      setSugerencia('');
+      await cargar();
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', e?.message || 'No se pudo avisar al cliente. Intenta de nuevo.');
+    } finally {
+      setTrabajando(false);
+    }
   };
 
   const finalizar = () => {
-    Alert.alert('Finalizar pedido', '¿Está todo empacado y listo para el retiro?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Finalizar',
-        onPress: async () => {
-          setTrabajando(true);
-          const { error } = await supabase.rpc('avanzar_pedido', { p_pedido: pedidoId });
-          setTrabajando(false);
-          if (error) {
-            Alert.alert('Error', error.message || 'No se pudo finalizar el pedido');
-            return;
-          }
-          Alert.alert('Pedido completado', 'El pedido quedó listo para retiro.', [
-            { text: 'OK', onPress: () => router.back() },
-          ]);
+    const hayFaltantes = items.some(esFaltante);
+    Alert.alert(
+      'Finalizar pedido',
+      hayFaltantes
+        ? 'Hay productos reportados como faltantes. ¿Está todo lo demás empacado y listo para el retiro?'
+        : '¿Está todo empacado y listo para el retiro?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Finalizar',
+          onPress: async () => {
+            setTrabajando(true);
+            const { error } = await supabase.rpc('avanzar_pedido', { p_pedido: pedidoId });
+            setTrabajando(false);
+            if (error) {
+              Alert.alert('Error', error.message || 'No se pudo finalizar el pedido');
+              return;
+            }
+            Alert.alert('Pedido completado', 'El pedido quedó listo para retiro.', [
+              { text: 'OK', onPress: () => router.back() },
+            ]);
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
+
+  const yaCompletado = pedido?.estado === 'completado' || pedido?.estado === 'entregado';
 
   const renderProducto = ({ item }) => {
     const listo = completo(item);
-    const parcial = !listo && recogidas(item) > 0;
+    const sinStock = esFaltante(item);
+    const parcial = !listo && !sinStock && recogidas(item) > 0;
 
     return (
-      <View style={[styles.productCard, listo && styles.cardEncontrado, parcial && styles.cardParcial]}>
+      <View
+        style={[
+          styles.productCard,
+          listo && styles.cardEncontrado,
+          parcial && styles.cardParcial,
+          sinStock && styles.cardFaltante,
+        ]}
+      >
         {item.productos?.imagen_url ? (
           <Image source={{ uri: item.productos.imagen_url }} style={styles.productImage} />
         ) : (
@@ -256,53 +300,35 @@ export default function PedidoScreen() {
           <Text style={styles.productName} numberOfLines={2}>
             {item.productos?.nombre ?? 'Producto'}
           </Text>
-          <Text style={[styles.productUnit, listo && { color: VERDE }]}>
-            {recogidas(item)} de {item.cantidad} recogidas
+          <Text
+            style={[
+              styles.productUnit,
+              listo && { color: VERDE },
+              sinStock && { color: PRIMARY },
+            ]}
+          >
+            {sinStock
+              ? `${recogidas(item)} de ${item.cantidad} recogidas · Faltante: ${item.motivo_faltante ?? ''}`
+              : `${recogidas(item)} de ${item.cantidad} recogidas`}
           </Text>
           <Text style={styles.productPrice}>
             {formatCLP(Number(item.precio_unitario) * item.cantidad)}
           </Text>
         </View>
 
-        {listo ? (
-          <View style={styles.actions}>
-            <Ionicons name="checkmark-circle" size={28} color={VERDE} />
+        <View style={styles.actions}>
+          {listo && <Ionicons name="checkmark-circle" size={28} color={VERDE} />}
+          {sinStock && <Ionicons name="alert-circle" size={28} color={PRIMARY} />}
+          {!listo && !sinStock && !yaCompletado && (
             <TouchableOpacity
               style={styles.notFoundBtn}
-              onPress={() => cambiarCantidad(item, -1)}
+              onPress={() => abrirFaltante(item)}
               disabled={trabajando}
             >
-              <Ionicons name="remove" size={18} color="#888" />
+              <Ionicons name="close" size={20} color={PRIMARY} />
             </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.scanBtn}
-              onPress={() => cambiarCantidad(item, 1)}
-              disabled={trabajando}
-            >
-              <Ionicons name="add" size={22} color={PRIMARY} />
-            </TouchableOpacity>
-            <View style={styles.actionsRow}>
-              {recogidas(item) > 0 && (
-                <TouchableOpacity
-                  style={styles.notFoundBtn}
-                  onPress={() => cambiarCantidad(item, -1)}
-                  disabled={trabajando}
-                >
-                  <Ionicons name="remove" size={18} color="#888" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.notFoundBtn}
-                onPress={() => productoNoEncontrado(item)}
-              >
-                <Ionicons name="close" size={18} color="#888" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          )}
+        </View>
       </View>
     );
   };
@@ -330,8 +356,6 @@ export default function PedidoScreen() {
       </SafeAreaView>
     );
   }
-
-  const yaCompletado = pedido.estado === 'completado';
 
   return (
     <SafeAreaView style={styles.container}>
@@ -399,6 +423,7 @@ export default function PedidoScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Escáner */}
       <Modal visible={escaneando} animationType="slide" onRequestClose={() => setEscaneando(false)}>
         <View style={styles.camaraFondo}>
           <CameraView
@@ -439,6 +464,56 @@ export default function PedidoScreen() {
           </SafeAreaView>
         </View>
       </Modal>
+
+      {/* Reporte de producto faltante */}
+      <Modal visible={!!faltante} transparent animationType="fade" onRequestClose={cerrarFaltante}>
+        <KeyboardAvoidingView
+          style={styles.modalFondo}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalCaja}>
+            <Text style={styles.modalTitulo}>{faltante?.productos?.nombre}</Text>
+            <Text style={styles.modalSub}>¿Qué pasó con este producto?</Text>
+
+            <View style={styles.chipsRow}>
+              {MOTIVOS.map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  onPress={() => setMotivo(m)}
+                  style={[styles.chip, motivo === m && styles.chipActivo]}
+                >
+                  <Text style={[styles.chipTexto, motivo === m && { color: PRIMARY }]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Sugerencia de reemplazo para el cliente (opcional)"
+              placeholderTextColor="#aaa"
+              value={sugerencia}
+              onChangeText={setSugerencia}
+              multiline
+              maxLength={200}
+            />
+
+            <TouchableOpacity
+              style={[styles.finalizarBtn, { alignSelf: 'stretch' }]}
+              onPress={enviarFaltante}
+              disabled={trabajando}
+            >
+              {trabajando ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.finalizarBtnText}>Avisar al cliente</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={cerrarFaltante} style={{ marginTop: 14 }}>
+              <Text style={{ textAlign: 'center', color: '#888', fontWeight: '600' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -478,6 +553,7 @@ const styles = StyleSheet.create({
   },
   cardEncontrado: { borderColor: VERDE, backgroundColor: '#f0fff4' },
   cardParcial: { borderColor: '#E67E22', backgroundColor: '#FFF8F0' },
+  cardFaltante: { borderColor: PRIMARY, backgroundColor: '#FFF5F4' },
   productImage: { width: 60, height: 60, borderRadius: 10, resizeMode: 'cover', backgroundColor: '#f5f5f5' },
   imageVacia: { alignItems: 'center', justifyContent: 'center' },
   productInfo: { flex: 1, marginLeft: 12, paddingRight: 8 },
@@ -485,14 +561,9 @@ const styles = StyleSheet.create({
   productUnit: { fontSize: 12, color: '#888', marginTop: 2 },
   productPrice: { fontSize: 14, fontWeight: '800', color: '#1a1a1a', marginTop: 4 },
   actions: { alignItems: 'center', gap: 8 },
-  actionsRow: { flexDirection: 'row', gap: 8 },
-  scanBtn: {
-    width: 44, height: 40, borderRadius: 10,
-    backgroundColor: '#fdecea', alignItems: 'center', justifyContent: 'center',
-  },
   notFoundBtn: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: '#f0f0f0', alignItems: 'center', justifyContent: 'center',
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: '#fdecea', alignItems: 'center', justifyContent: 'center',
   },
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -544,4 +615,19 @@ const styles = StyleSheet.create({
   vacio: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
   vacioTitulo: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
   vacioTexto: { fontSize: 14, color: '#888', textAlign: 'center' },
+  modalFondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 },
+  modalCaja: { backgroundColor: '#fff', borderRadius: 18, padding: 20 },
+  modalTitulo: { fontSize: 17, fontWeight: '800', color: '#1a1a1a' },
+  modalSub: { fontSize: 13, color: '#888', marginTop: 4, marginBottom: 14 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  chip: {
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18,
+    backgroundColor: '#f0f0f0', borderWidth: 1.5, borderColor: 'transparent',
+  },
+  chipActivo: { backgroundColor: '#fdecea', borderColor: PRIMARY },
+  chipTexto: { fontSize: 13, fontWeight: '600', color: '#555' },
+  modalInput: {
+    borderWidth: 1, borderColor: '#e5e5e5', borderRadius: 12, padding: 12,
+    minHeight: 70, marginBottom: 16, textAlignVertical: 'top', color: '#1a1a1a',
+  },
 });
