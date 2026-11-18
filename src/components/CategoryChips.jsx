@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { estaLogueado } from '../utils/estaLogueado';
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
@@ -21,6 +22,14 @@ export default function CategoryChips() {
       });
   }, []);
 
+  const handleCategoryPress = async (cat) => {
+    if (!(await estaLogueado())) {
+      router.push('/login');
+      return;
+    }
+    router.push(`/categoria/${cat.id}`);
+  };
+
   return (
     <ScrollView
       horizontal
@@ -37,7 +46,7 @@ export default function CategoryChips() {
           key={cat.id}
           style={styles.chip}
           activeOpacity={0.8}
-          onPress={() => router.push(`/categoria/${cat.id}`)}
+          onPress={() => handleCategoryPress(cat)}
         >
           <Text style={styles.emoji}>{cat.emoji || '🛒'}</Text>
           <Text style={styles.text}>{cat.nombre}</Text>

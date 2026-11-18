@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { TabBarProvider, useTabBar } from '../../context/TabBarContext';
+import { estaLogueado } from '../../utils/estaLogueado';
 
 const PRIMARY = '#C21807';
 const BASE_BOTTOM = 24;
@@ -16,6 +17,9 @@ const TABS = [
   { name: 'perfil',     title: 'Perfil',     icon: 'person-outline',   iconActive: 'person' },
 ];
 
+// Pestañas que exigen sesión iniciada
+const PROTECTED_TABS = ['categorias', 'cupones', 'ofertas'];
+
 function AnimatedTabBar({ state }) {
   const animations = useRef(TABS.map(() => new Animated.Value(1))).current;
   const { translateY, opacity, showTabBar } = useTabBar();
@@ -27,7 +31,7 @@ function AnimatedTabBar({ state }) {
     showTabBar();
   }, [state.index, showTabBar]);
 
-  const handlePress = (tabIndex, routeName, isFocused) => {
+  const handlePress = async (tabIndex, routeName, isFocused) => {
     Animated.sequence([
       Animated.timing(animations[tabIndex], {
         toValue: 0.85,
@@ -42,9 +46,14 @@ function AnimatedTabBar({ state }) {
       }),
     ]).start();
 
-    if (!isFocused) {
-      router.navigate(routeName === 'index' ? '/' : `/${routeName}`);
+    if (isFocused) return;
+
+    if (PROTECTED_TABS.includes(routeName) && !(await estaLogueado())) {
+      router.push('/login');
+      return;
     }
+
+    router.navigate(routeName === 'index' ? '/' : `/${routeName}`);
   };
 
   return (

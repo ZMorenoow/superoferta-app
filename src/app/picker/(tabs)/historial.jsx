@@ -7,6 +7,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,6 +24,19 @@ const formatFecha = (iso) => {
   const fecha = d.toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
   const hora = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
   return `${fecha} · ${hora}`;
+};
+
+// Lo que realmente se entregó: se ignoran los faltantes (el original de 6)
+// y se cuentan las unidades escaneadas de lo demás (incluye los reemplazos).
+const resumenEntrega = (items) => {
+  const entregados = items.filter((i) => i.estado !== 'faltante');
+  const unidades = entregados.reduce((s, i) => s + (Number(i.cantidad_escaneada) || 0), 0);
+  const monto = entregados.reduce(
+    (s, i) => s + (Number(i.cantidad_escaneada) || 0) * Number(i.precio_unitario || 0),
+    0
+  );
+  const faltantes = items.filter((i) => i.estado === 'faltante').length;
+  return { productos: entregados.length, unidades, monto, faltantes };
 };
 
 export default function HistorialScreen() {
@@ -55,7 +69,13 @@ export default function HistorialScreen() {
           total,
           direccion_entrega,
           created_at,
-          pedido_items ( id, cantidad )
+          pedido_items (
+            id,
+            cantidad,
+            cantidad_escaneada,
+            precio_unitario,
+            estado
+          )
         )
       `)
       .eq('id_picker', user.id)
@@ -81,17 +101,32 @@ export default function HistorialScreen() {
     }, [cargar])
   );
 
-  const totalDinero = pedidos.reduce((s, a) => s + Number(a.pedidos?.total || 0), 0);
+  const totalDinero = pedidos.reduce(
+    (s, a) => s + resumenEntrega(a.pedidos?.pedido_items ?? []).monto,
+    0
+  );
+
+  const abrirDetalle = (idPedido, cuando) => {
+    router.push({
+      pathname: '/picker/detalle',
+      params: { id: idPedido, fecha: cuando ?? '' },
+    });
+  };
 
   const renderPedido = ({ item }) => {
     const pedido = item.pedidos; // puede ser null si las reglas de acceso lo ocultan
     const idPedido = pedido?.id ?? item.id_pedido;
     const items = pedido?.pedido_items ?? [];
-    const unidades = items.reduce((s, i) => s + (Number(i.cantidad) || 0), 0);
+    const r = resumenEntrega(items);
     const cuando = item.fecha_completado ?? item.fecha_asignacion;
+    const hayDiferencia = pedido && Number(pedido.total) !== r.monto;
 
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.7}
+        onPress={() => abrirDetalle(idPedido, cuando)}
+      >
         <View style={styles.cardHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.pedidoLabel}>Pedido</Text>
@@ -117,17 +152,28 @@ export default function HistorialScreen() {
             <View style={styles.infoRow}>
               <Ionicons name="cube-outline" size={14} color="#888" />
               <Text style={styles.infoText}>
-                {items.length} {items.length === 1 ? 'producto' : 'productos'} · {unidades}{' '}
-                {unidades === 1 ? 'unidad' : 'unidades'}
+                {r.productos} {r.productos === 1 ? 'producto' : 'productos'} · {r.unidades}{' '}
+                {r.unidades === 1 ? 'unidad' : 'unidades'}
+                {r.faltantes > 0
+                  ? ` · ${r.faltantes} ${r.faltantes === 1 ? 'faltante' : 'faltantes'}`
+                  : ''}
               </Text>
             </View>
             <View style={styles.cardFooter}>
-              <Text style={styles.totalLabel}>Total del pedido</Text>
-              <Text style={styles.totalText}>{formatCLP(pedido.total)}</Text>
+              <View>
+                <Text style={styles.totalLabel}>Total entregado</Text>
+                {hayDiferencia && (
+                  <Text style={styles.pagadoText}>Pagado: {formatCLP(pedido.total)}</Text>
+                )}
+              </View>
+              <View style={styles.totalRight}>
+                <Text style={styles.totalText}>{formatCLP(r.monto)}</Text>
+                <Ionicons name="chevron-forward" size={18} color="#bbb" />
+              </View>
             </View>
           </>
         ) : null}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -231,6 +277,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   totalLabel: { fontSize: 13, color: '#777', fontWeight: '600' },
+  pagadoText: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  totalRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   totalText: { fontSize: 16, fontWeight: '800', color: PRIMARY },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 80, paddingHorizontal: 30 },
   emptyText: { fontSize: 14, color: '#aaa', textAlign: 'center' },

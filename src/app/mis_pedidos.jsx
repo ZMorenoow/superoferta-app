@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import EvidenciaGaleria from '../components/EvidenciaGaleria';
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
@@ -21,6 +22,12 @@ const VERDE = '#1B6B3A';
 // Solo se muestran pedidos reales. Los intentos de pago abandonados
 // (pendiente / cancelado) quedan guardados en la base de datos pero no se muestran.
 const ESTADOS_VISIBLES = ['pagado', 'asignado', 'en_proceso', 'completado'];
+
+const esFaltante = (item) => item?.estado === 'faltante';
+const propuestaPendiente = (item) =>
+  (item?.sustituciones ?? []).find((s) => s.estado === 'propuesta');
+const sustResuelta = (item) =>
+  (item?.sustituciones ?? []).find((s) => s.estado === 'aceptada' || s.estado === 'rechazada');
 
 export default function MisPedidosScreen() {
   const router = useRouter();
@@ -56,10 +63,21 @@ export default function MisPedidosScreen() {
             id,
             cantidad,
             precio_unitario,
+            estado,
+            motivo_faltante,
+            sugerencia,
+            id_item_origen,
             productos (
               id,
               nombre,
               imagen_url
+            ),
+            sustituciones (
+              id,
+              estado,
+              productos (
+                nombre
+              )
             )
           )
         `)
@@ -83,9 +101,34 @@ export default function MisPedidosScreen() {
     }
   }, [router]);
 
+  // Carga al entrar y se queda escuchando cambios mientras la pantalla está enfocada.
+  // Cuando el picker reporta un faltante o propone un reemplazo, el pedido se recarga solo.
   useFocusEffect(
     useCallback(() => {
       cargarPedidos();
+
+      const canal = supabase
+        .channel('mis-pedidos-items')
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'pedido_items' },
+          () => cargarPedidos()
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'pedidos' },
+          () => cargarPedidos()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'sustituciones' },
+          () => cargarPedidos()
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(canal);
+      };
     }, [cargarPedidos])
   );
 
@@ -184,10 +227,11 @@ export default function MisPedidosScreen() {
   const obtenerCantidadProductos = (pedido) => {
     if (!pedido.pedido_items) return 0;
 
-    return pedido.pedido_items.reduce(
-      (total, item) => total + (Number(item.cantidad) || 0),
-      0
-    );
+    // Los faltantes no se entregan: se cuentan solo los productos vigentes
+    // (incluye los reemplazos aceptados).
+    return pedido.pedido_items
+      .filter((item) => !esFaltante(item))
+      .reduce((total, item) => total + (Number(item.cantidad) || 0), 0);
   };
 
   return (
@@ -273,6 +317,65 @@ export default function MisPedidosScreen() {
               const estaExpandido = expanded === pedido.id;
               const cantidadProductos =
                 obtenerCantidadProductos(pedido);
+              const faltantes = (pedido.pedido_items || []).filter(esFaltante);
+              const hayPropuesta = faltantes.some((f) => !!propuestaPendiente(f));
+
+              const completado = pedido.estado === 'completado';
+              const todosItems = pedido.pedido_items || [];
+              const sinReemplazo = faltantes.filter(
+                (f) => !todosItems.some((r) => r.id_item_origen === f.id)
+              );
+              const montoDe = (lista) =>
+                lista.reduce(
+                  (s, i) => s + Number(i.precio_unitario || 0) * Number(i.cantidad || 0),
+                  0
+                );
+              // Diferencia entre lo pagado y lo realmente entregado (solo pedidos completados)
+              const ajuste = completado
+                ? montoDe(faltantes) - montoDe(todosItems.filter((i) => !!i.id_item_origen))
+                : 0;
+              const totalEntregado = Number(pedido.total || 0) - ajuste;
+
+              let banner = null;
+              if (faltantes.length > 0) {
+                if (!completado) {
+                  banner = {
+                    icono: 'alert-circle',
+                    color: PRIMARY,
+                    estilo: null,
+                    titulo: hayPropuesta
+                      ? 'Tienes un reemplazo por aprobar'
+                      : faltantes.length === 1
+                      ? '1 producto no está disponible'
+                      : `${faltantes.length} productos no están disponibles`,
+                    sub: hayPropuesta
+                      ? 'Toca para aceptar o rechazar'
+                      : 'Toca para ver el detalle',
+                  };
+                } else if (sinReemplazo.length === 0) {
+                  banner = {
+                    icono: 'swap-horizontal',
+                    color: VERDE,
+                    estilo: styles.bannerOk,
+                    titulo:
+                      faltantes.length === 1
+                        ? '1 producto fue reemplazado'
+                        : `${faltantes.length} productos fueron reemplazados`,
+                    sub: 'Toca para ver el detalle',
+                  };
+                } else {
+                  banner = {
+                    icono: 'information-circle',
+                    color: '#B45309',
+                    estilo: styles.bannerAviso,
+                    titulo:
+                      sinReemplazo.length === 1
+                        ? '1 producto no se pudo entregar'
+                        : `${sinReemplazo.length} productos no se pudieron entregar`,
+                    sub: 'Se reembolsa su valor · toca para ver el detalle',
+                  };
+                }
+              }
 
               return (
                 <View key={pedido.id} style={styles.orderCard}>
@@ -349,14 +452,46 @@ export default function MisPedidosScreen() {
                     </Text>
                   </View>
 
+                  {/* AVISO DE PRODUCTOS FALTANTES / REEMPLAZADOS */}
+                  {banner && (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      style={[styles.faltanteBanner, banner.estilo]}
+                      onPress={() =>
+                        hayPropuesta && !completado
+                          ? router.push({
+                              pathname: '/sustitucion',
+                              params: { pedido: pedido.id },
+                            })
+                          : setExpanded(pedido.id)
+                      }
+                    >
+                      <Ionicons name={banner.icono} size={22} color={banner.color} />
+                      <View style={styles.faltanteBannerTextos}>
+                        <Text style={[styles.faltanteBannerTitulo, { color: banner.color }]}>
+                          {banner.titulo}
+                        </Text>
+                        <Text style={styles.faltanteBannerSub}>{banner.sub}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={banner.color} />
+                    </TouchableOpacity>
+                  )}
+
                   {/* TOTAL */}
                   <View style={styles.totalRow}>
-                    <Text style={styles.totalLabel}>
-                      Total
-                    </Text>
+                    <View>
+                      <Text style={styles.totalLabel}>
+                        {ajuste !== 0 ? 'Total entregado' : 'Total'}
+                      </Text>
+                      {ajuste !== 0 && (
+                        <Text style={styles.pagadoText}>
+                          Pagado: {formatearPrecio(pedido.total)}
+                        </Text>
+                      )}
+                    </View>
 
                     <Text style={styles.totalValue}>
-                      {formatearPrecio(pedido.total)}
+                      {formatearPrecio(ajuste !== 0 ? totalEntregado : pedido.total)}
                     </Text>
                   </View>
 
@@ -390,59 +525,124 @@ export default function MisPedidosScreen() {
 
                       {pedido.pedido_items &&
                       pedido.pedido_items.length > 0 ? (
-                        pedido.pedido_items.map((item) => (
-                          <View
-                            key={item.id}
-                            style={styles.productRow}
-                          >
-                            {/* IMAGEN */}
-                            {item.productos?.imagen_url ? (
-                              <Image
-                                source={{
-                                  uri: item.productos.imagen_url,
-                                }}
-                                style={styles.productImage}
-                              />
-                            ) : (
-                              <View
-                                style={styles.productImagePlaceholder}
-                              >
-                                <Ionicons
-                                  name="cube-outline"
-                                  size={25}
-                                  color="#aaa"
-                                />
+                        pedido.pedido_items.map((item) => {
+                          const faltante = esFaltante(item);
+                          const sust = faltante ? sustResuelta(item) : null;
+
+                          return (
+                            <View
+                              key={item.id}
+                              style={[
+                                styles.productBlock,
+                                faltante && styles.productBlockFaltante,
+                              ]}
+                            >
+                              <View style={styles.productRow}>
+                                {/* IMAGEN */}
+                                {item.productos?.imagen_url ? (
+                                  <Image
+                                    source={{
+                                      uri: item.productos.imagen_url,
+                                    }}
+                                    style={styles.productImage}
+                                  />
+                                ) : (
+                                  <View
+                                    style={styles.productImagePlaceholder}
+                                  >
+                                    <Ionicons
+                                      name="cube-outline"
+                                      size={25}
+                                      color="#aaa"
+                                    />
+                                  </View>
+                                )}
+
+                                {/* INFORMACIÓN */}
+                                <View style={styles.productInfo}>
+                                  {!!item.id_item_origen && (
+                                    <Text style={styles.reemplazoTag}>
+                                      Reemplazo aceptado
+                                    </Text>
+                                  )}
+
+                                  <Text
+                                    style={styles.productName}
+                                    numberOfLines={2}
+                                  >
+                                    {item.productos?.nombre ||
+                                      'Producto'}
+                                  </Text>
+
+                                  <Text style={styles.productQuantity}>
+                                    Cantidad: {item.cantidad}
+                                  </Text>
+                                </View>
+
+                                {/* PRECIO */}
+                                <Text
+                                  style={[
+                                    styles.productPrice,
+                                    faltante && styles.productPriceTachado,
+                                  ]}
+                                >
+                                  {formatearPrecio(
+                                    Number(item.precio_unitario) *
+                                      Number(item.cantidad)
+                                  )}
+                                </Text>
                               </View>
-                            )}
 
-                            {/* INFORMACIÓN */}
-                            <View style={styles.productInfo}>
-                              <Text
-                                style={styles.productName}
-                                numberOfLines={2}
-                              >
-                                {item.productos?.nombre ||
-                                  'Producto'}
-                              </Text>
+                              {/* DETALLE DEL FALTANTE */}
+                              {faltante && (
+                                <View style={styles.faltanteInfo}>
+                                  <View style={styles.faltanteTag}>
+                                    <Ionicons name="alert-circle" size={14} color={PRIMARY} />
+                                    <Text style={styles.faltanteTagText}>
+                                      No disponible
+                                      {item.motivo_faltante ? ` · ${item.motivo_faltante}` : ''}
+                                    </Text>
+                                  </View>
 
-                              <Text style={styles.productQuantity}>
-                                Cantidad: {item.cantidad}
-                              </Text>
-                            </View>
+                                  {!!item.sugerencia && (
+                                    <View style={styles.sugerenciaBox}>
+                                      <Text style={styles.sugerenciaLabel}>
+                                        Nota del preparador
+                                      </Text>
+                                      <Text style={styles.sugerenciaTexto}>
+                                        {item.sugerencia}
+                                      </Text>
+                                    </View>
+                                  )}
 
-                            {/* PRECIO */}
-                            <Text style={styles.productPrice}>
-                              {formatearPrecio(
-                                Number(item.precio_unitario) *
-                                  Number(item.cantidad)
+                                  {/* RESULTADO DEL REEMPLAZO */}
+                                  {sust?.estado === 'aceptada' && (
+                                    <Text style={styles.reemplazoEstadoOk}>
+                                      Aceptaste el reemplazo: {sust.productos?.nombre}
+                                    </Text>
+                                  )}
+                                  {sust?.estado === 'rechazada' && (
+                                    <Text style={styles.reemplazoEstadoNo}>
+                                      Rechazaste el reemplazo sugerido
+                                    </Text>
+                                  )}
+                                </View>
                               )}
-                            </Text>
-                          </View>
-                        ))
+                            </View>
+                          );
+                        })
                       ) : (
                         <Text style={styles.noProducts}>
                           No hay productos asociados a este pedido.
                         </Text>
+                      )}
+
+                      {/* FOTOS DE EVIDENCIA (solo cuando el pedido ya está completado) */}
+                      {pedido.estado === 'completado' && (
+                        <EvidenciaGaleria
+                          pedidoId={pedido.id}
+                          titulo="Fotos de tu pedido"
+                        />
                       )}
 
                       {/* DIRECCIÓN */}
@@ -693,6 +893,53 @@ const styles = StyleSheet.create({
     color: '#888',
   },
 
+  // Aviso de faltantes (resumen en la tarjeta)
+  faltanteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 12,
+    backgroundColor: '#FFF5F4',
+    borderWidth: 1.5,
+    borderColor: PRIMARY,
+  },
+
+  faltanteBannerTextos: {
+    flex: 1,
+  },
+
+  faltanteBannerTitulo: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: PRIMARY,
+  },
+
+  faltanteBannerSub: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 2,
+  },
+
+  bannerOk: {
+    backgroundColor: '#F0FFF4',
+    borderColor: VERDE,
+  },
+
+  bannerAviso: {
+    backgroundColor: '#FFFBEB',
+    borderColor: '#D97706',
+  },
+
+  pagadoText: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 2,
+  },
+
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -774,10 +1021,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
+  productBlock: {
+    marginBottom: 12,
+  },
+
+  productBlockFaltante: {
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#FFF5F4',
+    borderWidth: 1,
+    borderColor: '#f5c6c2',
+  },
+
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
   },
 
   productImage: {
@@ -803,6 +1061,13 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
 
+  reemplazoTag: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: VERDE,
+    marginBottom: 2,
+  },
+
   productName: {
     fontSize: 13,
     fontWeight: '700',
@@ -819,6 +1084,68 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: '#333',
+  },
+
+  productPriceTachado: {
+    color: '#aaa',
+    textDecorationLine: 'line-through',
+  },
+
+  faltanteInfo: {
+    marginTop: 10,
+  },
+
+  faltanteTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#fdecea',
+  },
+
+  faltanteTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: PRIMARY,
+  },
+
+  sugerenciaBox: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+
+  sugerenciaLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#555',
+    marginBottom: 3,
+  },
+
+  sugerenciaTexto: {
+    fontSize: 13,
+    color: '#444',
+    lineHeight: 18,
+  },
+
+  reemplazoEstadoOk: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: VERDE,
+  },
+
+  reemplazoEstadoNo: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#777',
   },
 
   noProducts: {

@@ -22,6 +22,15 @@ const ESTADO_CONFIG = {
 
 const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
 
+// Mismas reglas que el detalle del pedido, para que ambas pantallas cuenten igual.
+const esFaltante = (i) => i.estado === 'faltante';
+const sustPendiente = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'propuesta');
+const completo = (i) => (i.cantidad_escaneada || 0) >= i.cantidad;
+// Resuelto: recogido completo, o faltante sin sugerencia esperando respuesta del cliente.
+const resuelto = (i) => completo(i) || (esFaltante(i) && !sustPendiente(i));
+// Lo que realmente se entrega = lo pagado menos lo que se va a reembolsar.
+const totalEntregar = (p) => Number(p.total || 0) - Number(p.reembolso_pendiente || 0);
+
 export default function PickerHome() {
   const router = useRouter();
   const [nombre, setNombre] = useState('Picker');
@@ -60,9 +69,16 @@ export default function PickerHome() {
         pedidos (
           id,
           total,
+          reembolso_pendiente,
           direccion_entrega,
           created_at,
-          pedido_items ( id, cantidad, cantidad_escaneada )
+          pedido_items (
+            id,
+            cantidad,
+            cantidad_escaneada,
+            estado,
+            sustituciones ( id, estado )
+          )
         )
       `)
       .eq('id_picker', user.id)
@@ -87,17 +103,22 @@ export default function PickerHome() {
     }, [cargar])
   );
 
+  // Unidades por preparar: los faltantes no cuentan (el reemplazo aceptado sí, como ítem aparte).
   const totalUnidades = asignaciones.reduce(
-    (s, a) => s + (a.pedidos.pedido_items || []).reduce((x, i) => x + i.cantidad, 0),
+    (s, a) =>
+      s +
+      (a.pedidos.pedido_items || [])
+        .filter((i) => !esFaltante(i))
+        .reduce((x, i) => x + i.cantidad, 0),
     0
   );
-  const totalDinero = asignaciones.reduce((s, a) => s + Number(a.pedidos.total || 0), 0);
+  const totalDinero = asignaciones.reduce((s, a) => s + totalEntregar(a.pedidos), 0);
 
   const renderPedido = ({ item }) => {
     const pedido = item.pedidos;
     const items = pedido.pedido_items || [];
     const estado = ESTADO_CONFIG[item.estado] ?? ESTADO_CONFIG.asignado;
-    const listos = items.filter((i) => (i.cantidad_escaneada || 0) >= i.cantidad).length;
+    const listos = items.filter(resuelto).length;
     const hora = new Date(pedido.created_at).toLocaleTimeString('es-CL', {
       hour: '2-digit',
       minute: '2-digit',
@@ -154,7 +175,7 @@ export default function PickerHome() {
         </View>
 
         <View style={styles.cardFooter}>
-          <Text style={styles.totalText}>{formatCLP(pedido.total)}</Text>
+          <Text style={styles.totalText}>{formatCLP(totalEntregar(pedido))}</Text>
           <View style={styles.startBtn}>
             <Text style={styles.startBtnText}>
               {listos > 0 || item.estado === 'en_proceso' ? 'Continuar' : 'Iniciar picking'}

@@ -273,6 +273,17 @@ export default function HomeScreen() {
 
   useEffect(() => { fetchProducts(''); }, []);
 
+  const handleProductPress = useCallback(async (item) => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    router.push({ pathname: '/product-detail', params: { id: item.id } });
+  }, [router]);
+
   const handleAddToCart = useCallback(async (item) => {
     const resultado = await agregarAlCarrito(item);
 
@@ -298,7 +309,7 @@ export default function HomeScreen() {
     return (
       <TouchableOpacity
         style={styles.productCard}
-        onPress={() => router.push({ pathname: '/product-detail', params: { id: item.id } })}
+        onPress={() => handleProductPress(item)}
         activeOpacity={0.85}
       >
         <View style={styles.productImageWrapper}>
@@ -334,7 +345,7 @@ export default function HomeScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [router, handleAddToCart]);
+  }, [router, handleAddToCart, handleProductPress]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
