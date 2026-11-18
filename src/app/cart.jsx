@@ -16,11 +16,36 @@ import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
 
+// Horarios de retiro: bloques de 30 min entre 09:00 y 21:00
+const HORA_INICIO = 9;
+const HORA_FIN = 21;
+const MINUTOS_ANTICIPACION = 30;
+
+export const generarHorarios = (dia, ahora = new Date()) => {
+  const slots = [];
+  const minimo = new Date(ahora.getTime() + MINUTOS_ANTICIPACION * 60000);
+  for (let h = HORA_INICIO; h <= HORA_FIN; h++) {
+    for (const m of [0, 30]) {
+      if (h === HORA_FIN && m === 30) continue;
+      const d = new Date(ahora);
+      d.setDate(d.getDate() + dia);
+      d.setHours(h, m, 0, 0);
+      if (d >= minimo) slots.push(d);
+    }
+  }
+  return slots;
+};
+
+const formatHora = (d) =>
+  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
 export default function CarritoScreen() {
   const router = useRouter();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmando, setConfirmando] = useState(false);
+  const [diaRetiro, setDiaRetiro] = useState(0); // 0 = hoy, 1 = mañana
+  const [horaRetiro, setHoraRetiro] = useState(null);
 
   const cargarCarrito = useCallback(async () => {
     setLoading(true);
@@ -176,11 +201,16 @@ export default function CarritoScreen() {
   // El carrito se vacía recién cuando el pago queda confirmado (en order-status).
   const confirmarPedido = async () => {
     if (items.length === 0 || confirmando) return;
+    if (!horaRetiro) {
+      Alert.alert('Hora de retiro', 'Elige a qué hora vas a retirar tu pedido.');
+      return;
+    }
     setConfirmando(true);
 
     try {
       const { data: pedidoId, error: pedidoError } = await supabase.rpc(
-        'crear_pedido_desde_carrito'
+        'crear_pedido_desde_carrito',
+        { p_hora_retiro: horaRetiro.toISOString() }
       );
       if (pedidoError) throw pedidoError;
 
@@ -199,7 +229,12 @@ export default function CarritoScreen() {
     } catch (e) {
       console.error('Error al iniciar el pago', e);
       // Mensajes del servidor que sí conviene mostrar tal cual (sin stock, sin sucursal, etc.).
-      const mensajesVisibles = ['Stock insuficiente', 'Producto no disponible', 'Elige tu sucursal'];
+      const mensajesVisibles = [
+        'Stock insuficiente',
+        'Producto no disponible',
+        'Elige tu sucursal',
+        'Hora de retiro',
+      ];
       const mostrar = mensajesVisibles.some((m) => e?.message?.startsWith(m));
       Alert.alert(
         'No se pudo continuar',
@@ -276,6 +311,8 @@ export default function CarritoScreen() {
     );
   }
 
+  const horarios = generarHorarios(diaRetiro);
+
   return (
     <SafeAreaView style={styles.container}>
       <Header mostrarVaciar={true} />
@@ -284,8 +321,48 @@ export default function CarritoScreen() {
         data={items}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 220 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 240 }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListFooterComponent={
+          <View style={styles.retiroBox}>
+            <Text style={styles.retiroTitle}>¿Cuándo retiras tu pedido?</Text>
+
+            <View style={styles.diaRow}>
+              {['Hoy', 'Mañana'].map((label, idx) => (
+                <TouchableOpacity
+                  key={label}
+                  style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
+                  onPress={() => { setDiaRetiro(idx); setHoraRetiro(null); }}
+                >
+                  <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {horarios.length === 0 ? (
+              <Text style={styles.sinHorarios}>Ya no hay horarios hoy. Elige "Mañana".</Text>
+            ) : (
+              <View style={styles.slotsWrap}>
+                {horarios.map((d) => {
+                  const activo = horaRetiro?.getTime() === d.getTime();
+                  return (
+                    <TouchableOpacity
+                      key={d.getTime()}
+                      style={[styles.slot, activo && styles.slotActive]}
+                      onPress={() => setHoraRetiro(d)}
+                    >
+                      <Text style={[styles.slotText, activo && styles.slotTextActive]}>
+                        {formatHora(d)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        }
       />
 
       <View style={styles.summary}>
@@ -295,7 +372,9 @@ export default function CarritoScreen() {
         </View>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Punto Retiro</Text>
-          <Text style={[styles.summaryValue, { color: '#1B6B3A' }]}>Gratis</Text>
+          <Text style={[styles.summaryValue, { color: '#1B6B3A' }]}>
+            {horaRetiro ? `${formatHora(horaRetiro)} hrs` : 'Gratis'}
+          </Text>
         </View>
         <View style={[styles.summaryRow, styles.totalRow]}>
           <Text style={styles.totalLabel}>Total</Text>
@@ -303,14 +382,16 @@ export default function CarritoScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.btnConfirmar}
+          style={[styles.btnConfirmar, !horaRetiro && styles.btnConfirmarDisabled]}
           onPress={confirmarPedido}
           disabled={confirmando}
         >
           {confirmando ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.btnConfirmarText}>Pagar con Webpay</Text>
+            <Text style={styles.btnConfirmarText}>
+              {horaRetiro ? 'Pagar con Webpay' : 'Elige hora de retiro'}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -335,6 +416,19 @@ const styles = StyleSheet.create({
   qtyBtn: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fdecea' },
   qtyText: { paddingHorizontal: 12, fontSize: 15, fontWeight: '800', color: '#1a1a1a' },
   separator: { height: 10 },
+  retiroBox: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 16 },
+  retiroTitle: { fontSize: 15, fontWeight: '800', color: '#1a1a1a', marginBottom: 12 },
+  diaRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  diaBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#f5f5f5' },
+  diaBtnActive: { backgroundColor: PRIMARY },
+  diaText: { fontWeight: '700', color: '#555' },
+  diaTextActive: { color: '#fff' },
+  slotsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  slot: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: '#e0e0e0' },
+  slotActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  slotText: { fontWeight: '700', color: '#1a1a1a' },
+  slotTextActive: { color: '#fff' },
+  sinHorarios: { fontSize: 13, color: '#999' },
   summary: {
     position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff',
     borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36,
@@ -347,6 +441,7 @@ const styles = StyleSheet.create({
   totalLabel: { fontSize: 17, fontWeight: '800', color: '#1a1a1a' },
   totalValue: { fontSize: 17, fontWeight: '900', color: PRIMARY },
   btnConfirmar: { backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+  btnConfirmarDisabled: { backgroundColor: '#d9a09a' },
   btnConfirmarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },

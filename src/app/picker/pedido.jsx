@@ -25,6 +25,19 @@ const VERDE = '#1B6B3A';
 
 const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
 
+const formatHoraRetiro = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const manana = new Date();
+  manana.setDate(manana.getDate() + 1);
+  const hh = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const dia =
+    d.toDateString() === new Date().toDateString() ? 'Hoy'
+    : d.toDateString() === manana.toDateString() ? 'Mañana'
+    : d.toLocaleDateString('es-CL');
+  return `${dia} ${hh} hrs`;
+};
+
 // Compara códigos ignorando ceros iniciales (UPC-A y EAN-13 del mismo producto).
 const normalizar = (c) => String(c ?? '').replace(/\D/g, '').replace(/^0+/, '');
 
@@ -93,6 +106,7 @@ export default function PedidoScreen() {
         total,
         reembolso_pendiente,
         direccion_entrega,
+        hora_retiro,
         pedido_items (
           id,
           cantidad,
@@ -602,7 +616,14 @@ export default function PedidoScreen() {
           </Text>
         </View>
       </View>
-
+      {pedido.hora_retiro && (
+        <View style={styles.retiroBadge}>
+          <Ionicons name="time-outline" size={16} color={PRIMARY} />
+          <Text style={styles.retiroBadgeText}>
+            Retira: {formatHoraRetiro(pedido.hora_retiro)}
+          </Text>
+        </View>
+      )}
       <View style={styles.progressBarContainer}>
         <View style={styles.progressBarBg}>
           <View style={[styles.progressBarFill, { width: `${pct}%` }]} />

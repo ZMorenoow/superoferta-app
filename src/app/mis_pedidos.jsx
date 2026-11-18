@@ -19,6 +19,19 @@ import { supabase } from '../utils/supabase';
 const PRIMARY = '#C21807';
 const VERDE = '#1B6B3A';
 
+const formatHoraRetiro = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const manana = new Date();
+  manana.setDate(manana.getDate() + 1);
+  const hh = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const dia =
+    d.toDateString() === new Date().toDateString() ? 'Hoy'
+    : d.toDateString() === manana.toDateString() ? 'Mañana'
+    : d.toLocaleDateString('es-CL');
+  return `${dia} ${hh} hrs`;
+};
+
 // Solo se muestran pedidos reales. Los intentos de pago abandonados
 // (pendiente / cancelado) quedan guardados en la base de datos pero no se muestran.
 const ESTADOS_VISIBLES = ['pagado', 'asignado', 'en_proceso', 'completado'];
@@ -56,6 +69,7 @@ export default function MisPedidosScreen() {
           estado,
           total,
           direccion_entrega,
+          hora_retiro,
           notas,
           codigo_retiro,
           created_at,
@@ -475,6 +489,16 @@ export default function MisPedidosScreen() {
                       </View>
                       <Ionicons name="chevron-forward" size={18} color={banner.color} />
                     </TouchableOpacity>
+                  )}
+
+                  {/* HORA DE RETIRO (solo mientras el pedido no está completado) */}
+                  {pedido.hora_retiro && !completado && (
+                    <View style={styles.retiroHoraRow}>
+                      <Ionicons name="time-outline" size={16} color={PRIMARY} />
+                      <Text style={styles.retiroHoraText}>
+                        Retiro: {formatHoraRetiro(pedido.hora_retiro)}
+                      </Text>
+                    </View>
                   )}
 
                   {/* TOTAL */}
@@ -932,6 +956,20 @@ const styles = StyleSheet.create({
   bannerAviso: {
     backgroundColor: '#FFFBEB',
     borderColor: '#D97706',
+  },
+
+  retiroHoraRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+
+  retiroHoraText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: PRIMARY,
   },
 
   pagadoText: {

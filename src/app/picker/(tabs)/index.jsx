@@ -22,6 +22,19 @@ const ESTADO_CONFIG = {
 
 const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
 
+const formatHoraRetiro = (iso) => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const manana = new Date();
+  manana.setDate(manana.getDate() + 1);
+  const hh = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const dia =
+    d.toDateString() === new Date().toDateString() ? 'Hoy'
+    : d.toDateString() === manana.toDateString() ? 'Mañana'
+    : d.toLocaleDateString('es-CL');
+  return `${dia} ${hh} hrs`;
+};
+
 // Mismas reglas que el detalle del pedido, para que ambas pantallas cuenten igual.
 const esFaltante = (i) => i.estado === 'faltante';
 const sustPendiente = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'propuesta');
@@ -71,6 +84,7 @@ export default function PickerHome() {
           total,
           reembolso_pendiente,
           direccion_entrega,
+          hora_retiro,
           created_at,
           pedido_items (
             id,
@@ -88,7 +102,16 @@ export default function PickerHome() {
     if (error) {
       console.error('Error cargando pedidos del picker', error);
     } else {
-      setAsignaciones((data || []).filter((a) => a.pedidos));
+      const lista = (data || []).filter((a) => a.pedidos);
+      // Primero lo que se retira antes; sin hora van al final; a igual hora, orden de asignación.
+      const t = (a) =>
+        a.pedidos.hora_retiro ? new Date(a.pedidos.hora_retiro).getTime() : Infinity;
+      lista.sort(
+        (a, b) =>
+          t(a) - t(b) ||
+          new Date(a.fecha_asignacion) - new Date(b.fecha_asignacion)
+      );
+      setAsignaciones(lista);
     }
     setLoading(false);
     setRefreshing(false);
@@ -143,6 +166,14 @@ export default function PickerHome() {
         </View>
 
         <View style={styles.cardInfo}>
+          {pedido.hora_retiro && (
+            <View style={styles.infoRow}>
+              <Ionicons name="time" size={14} color={PRIMARY} />
+              <Text style={styles.infoTextRetiro}>
+                Retira: {formatHoraRetiro(pedido.hora_retiro)}
+              </Text>
+            </View>
+          )}
           <View style={styles.infoRow}>
             <Ionicons name="location-outline" size={14} color="#888" />
             <Text style={styles.infoText}>{pedido.direccion_entrega || 'Retiro en tienda'}</Text>
@@ -291,6 +322,7 @@ const styles = StyleSheet.create({
   cardInfo: { gap: 6, marginBottom: 16 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   infoText: { fontSize: 13, color: '#555' },
+  infoTextRetiro: { fontSize: 13, fontWeight: '800', color: PRIMARY },
   progressContainer: { marginBottom: 16 },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   progressLabel: { fontSize: 12, color: '#888' },
