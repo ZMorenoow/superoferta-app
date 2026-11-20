@@ -1,13 +1,4 @@
-// components/CodigoRetiro.jsx
-// Muestra el código de retiro al cliente, estilo PedidosYa.
-//
-// Uso en la pantalla de detalle del pedido del cliente:
-//   <CodigoRetiro pedidoId={pedido.id} estado={pedido.estado} />
-//
-// - Mientras se prepara: avisa que el código aparecerá cuando esté listo.
-// - Cuando el pedido está 'completado': muestra el código grande.
-// - Cuando está 'entregado': muestra la confirmación de entrega.
-import { Ionicons } from '@expo/vector-icons';
+
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { supabase } from '../utils/supabase';
@@ -16,11 +7,10 @@ const PRIMARY = '#C21807';
 const VERDE = '#1B6B3A';
 
 async function obtenerCodigo(pedidoId) {
-  // Si activaste el bloque opcional del SQL, el código se pide por función.
+
   const viaRpc = await supabase.rpc('mi_codigo_retiro', { p_pedido: pedidoId });
   if (!viaRpc.error && viaRpc.data) return viaRpc.data;
 
-  // Si no, se lee directo (la política RLS ya limita a los pedidos del cliente).
   const { data } = await supabase
     .from('pedidos')
     .select('codigo_retiro')

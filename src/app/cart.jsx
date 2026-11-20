@@ -19,7 +19,7 @@ const PRIMARY = '#C21807';
 // Horarios de retiro: bloques de 30 min entre 09:00 y 21:00
 const HORA_INICIO = 9;
 const HORA_FIN = 21;
-const MINUTOS_ANTICIPACION = 30;
+const MINUTOS_ANTICIPACION = 60;
 
 export const generarHorarios = (dia, ahora = new Date()) => {
   const slots = [];
@@ -94,14 +94,12 @@ export default function CarritoScreen() {
       return;
     }
 
-    // Sucursal elegida por el cliente
     const { data: perfil } = await supabase
       .from('perfiles')
       .select('id_sucursal_preferida')
       .eq('id', user.id)
       .single();
 
-    // Precio y stock reales de esa sucursal
     let porProducto = {};
     const ids = (carritoItems || []).map((ci) => ci.id_producto);
     if (perfil?.id_sucursal_preferida && ids.length > 0) {
@@ -122,7 +120,7 @@ export default function CarritoScreen() {
           productoId: ci.id_producto,
           nombre: ci.productos?.nombre ?? 'Producto',
           imagen: ci.productos?.imagen_url,
-          precio: real?.precio ?? ci.precio_unitario, // precio de la sucursal
+          precio: real?.precio ?? ci.precio_unitario, 
           stock: real?.stock ?? 0,
           cantidad: ci.cantidad,
         };
@@ -143,7 +141,6 @@ export default function CarritoScreen() {
 
     const nuevaCantidad = item.cantidad + delta;
 
-    // No subir más allá del stock de la sucursal
     if (delta > 0 && nuevaCantidad > item.stock) {
       Alert.alert('Sin stock', `Solo quedan ${item.stock} unidades disponibles`);
       return;
@@ -195,10 +192,6 @@ export default function CarritoScreen() {
     ]);
   };
 
-  // 1) El servidor crea el pedido desde el carrito (con el total calculado allá).
-  // 2) webpay-create inicia el pago en Transbank.
-  // 3) Se abre la pantalla con el WebView de Webpay.
-  // El carrito se vacía recién cuando el pago queda confirmado (en order-status).
   const confirmarPedido = async () => {
     if (items.length === 0 || confirmando) return;
     if (!horaRetiro) {

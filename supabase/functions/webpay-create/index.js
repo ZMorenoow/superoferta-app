@@ -11,7 +11,7 @@ const json = (body, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
-// buy_order de Transbank: máximo 26 caracteres, solo letras y números.
+
 const generarOrdenCompra = () => {
   const tiempo = Date.now().toString(36);
   const azar = Math.random().toString(36).slice(2, 6);
@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const TBK_API_SECRET = Deno.env.get('TBK_API_SECRET');
     const TBK_BASE_URL = Deno.env.get('TBK_BASE_URL');
 
-    // 1. Quién llama: se valida con el token de sesión que manda la app.
+
     const authHeader = req.headers.get('Authorization') ?? '';
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {
       global: { headers: { Authorization: authHeader } },
@@ -39,11 +39,11 @@ Deno.serve(async (req) => {
     if (userError || !userData.user) return json({ error: 'No autenticado' }, 401);
     const user = userData.user;
 
-    // 2. Qué pedido quiere pagar.
+
     const { id_pedido } = await req.json();
     if (!id_pedido) return json({ error: 'Falta id_pedido' }, 400);
 
-    // 3. El monto se toma SIEMPRE de la base de datos, nunca de la app.
+   
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const { data: pedido, error: pedidoError } = await admin
       .from('pedidos')
@@ -53,11 +53,11 @@ Deno.serve(async (req) => {
 
     if (pedidoError) {
       console.error('Error leyendo el pedido', pedidoError);
-      // "detalle" es solo para depurar; se puede quitar cuando todo funcione.
+
       return json({ error: 'No se pudo leer el pedido', detalle: pedidoError.message }, 500);
     }
     if (!pedido) {
-      // "detalle" es solo para depurar; se puede quitar cuando todo funcione.
+  
       return json({ error: 'Pedido no encontrado', detalle: 'la consulta no devolvió filas' }, 404);
     }
     if (pedido.id_cliente !== user.id) {
@@ -73,7 +73,6 @@ Deno.serve(async (req) => {
       return json({ error: 'El total del pedido no es válido' }, 400);
     }
 
-    // 4. Crear la transacción en Transbank.
     const ordenCompra = generarOrdenCompra();
     const tbkRes = await fetch(
       `${TBK_BASE_URL}/rswebpaytransaction/api/webpay/v1.2/transactions`,
@@ -99,7 +98,7 @@ Deno.serve(async (req) => {
     }
     const tbk = await tbkRes.json();
 
-    // 5. Registrar el intento de pago.
+
     const { error: pagoError } = await admin.from('pagos').insert({
       id_pedido: pedido.id,
       id_cliente: user.id,

@@ -1,21 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
 
-// Muestra las fotos de evidencia de un pedido. Sirve para el picker y para el cliente:
-// quien pueda ver el pedido (por RLS) puede ver sus fotos. Si no hay fotos, no muestra nada.
+
+
 export default function EvidenciaGaleria({ pedidoId, titulo = 'Fotos del pedido' }) {
   const [fotos, setFotos] = useState([]);
   const [loading, setLoading] = useState(true);

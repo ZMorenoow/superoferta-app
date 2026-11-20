@@ -1,4 +1,4 @@
-// src/app/checkout.jsx
+
 import { useRouter } from 'expo-router';
 
 export default function CheckoutPage() {

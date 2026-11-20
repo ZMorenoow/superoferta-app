@@ -11,7 +11,6 @@ import { supabase } from '../../utils/supabase';
 
 const PRIMARY = '#C21807';
 
-// Muestra la imagen completa, tomando la proporción real de la foto
 function OfertaImagen({ uri }) {
   const [ratio, setRatio] = useState(1644 / 2048);
   return (
@@ -46,8 +45,6 @@ export default function OfertasScreen() {
     setLoading(false);
   }, []);
 
-  // Recarga las ofertas cada vez que se abre la pestaña,
-  // así los cambios hechos en la base de datos se ven al volver aquí.
   useFocusEffect(
     useCallback(() => {
       cargarOfertas();

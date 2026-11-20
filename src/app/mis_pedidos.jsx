@@ -32,8 +32,6 @@ const formatHoraRetiro = (iso) => {
   return `${dia} ${hh} hrs`;
 };
 
-// Solo se muestran pedidos reales. Los intentos de pago abandonados
-// (pendiente / cancelado) quedan guardados en la base de datos pero no se muestran.
 const ESTADOS_VISIBLES = ['pagado', 'asignado', 'en_proceso', 'completado'];
 
 const esFaltante = (item) => item?.estado === 'faltante';
@@ -115,8 +113,6 @@ export default function MisPedidosScreen() {
     }
   }, [router]);
 
-  // Carga al entrar y se queda escuchando cambios mientras la pantalla está enfocada.
-  // Cuando el picker reporta un faltante o propone un reemplazo, el pedido se recarga solo.
   useFocusEffect(
     useCallback(() => {
       cargarPedidos();
@@ -241,8 +237,6 @@ export default function MisPedidosScreen() {
   const obtenerCantidadProductos = (pedido) => {
     if (!pedido.pedido_items) return 0;
 
-    // Los faltantes no se entregan: se cuentan solo los productos vigentes
-    // (incluye los reemplazos aceptados).
     return pedido.pedido_items
       .filter((item) => !esFaltante(item))
       .reduce((total, item) => total + (Number(item.cantidad) || 0), 0);
@@ -917,7 +911,7 @@ const styles = StyleSheet.create({
     color: '#888',
   },
 
-  // Aviso de faltantes (resumen en la tarjeta)
+
   faltanteBanner: {
     flexDirection: 'row',
     alignItems: 'center',

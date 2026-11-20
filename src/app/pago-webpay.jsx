@@ -8,8 +8,6 @@ import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
 
-// Debe coincidir con RESULT_URL de la función webpay-return.
-// Esa dirección es falsa a propósito: el WebView la intercepta y nunca se carga.
 const RESULT_PREFIX = 'https://superoferta.local/pago-resultado';
 
 const escapar = (valor) => String(valor).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -37,7 +35,7 @@ export default function PagoWebpayScreen() {
   const irAlResultado = () => {
     if (terminado.current) return;
     terminado.current = true;
-    // No se usa nada de la URL: el estado real se lee desde Supabase.
+
     router.replace({ pathname: '/order-status', params: { pedido } });
   };
 

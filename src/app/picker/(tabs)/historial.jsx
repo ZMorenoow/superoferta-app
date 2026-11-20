@@ -26,8 +26,6 @@ const formatFecha = (iso) => {
   return `${fecha} · ${hora}`;
 };
 
-// Lo que realmente se entregó: se ignoran los faltantes (el original de 6)
-// y se cuentan las unidades escaneadas de lo demás (incluye los reemplazos).
 const resumenEntrega = (items) => {
   const entregados = items.filter((i) => i.estado !== 'faltante');
   const unidades = entregados.reduce((s, i) => s + (Number(i.cantidad_escaneada) || 0), 0);
@@ -55,7 +53,6 @@ export default function HistorialScreen() {
       return;
     }
 
-    // RLS ya limita esto a los pedidos de este picker.
     const { data, error } = await supabase
       .from('pedido_picker')
       .select(`
@@ -94,7 +91,6 @@ export default function HistorialScreen() {
     setRefreshing(false);
   }, [router]);
 
-  // Se actualiza cada vez que se vuelve a esta pestaña.
   useFocusEffect(
     useCallback(() => {
       cargar();
@@ -114,7 +110,7 @@ export default function HistorialScreen() {
   };
 
   const renderPedido = ({ item }) => {
-    const pedido = item.pedidos; // puede ser null si las reglas de acceso lo ocultan
+    const pedido = item.pedidos;
     const idPedido = pedido?.id ?? item.id_pedido;
     const items = pedido?.pedido_items ?? [];
     const r = resumenEntrega(items);

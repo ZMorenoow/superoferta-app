@@ -22,18 +22,18 @@ import CategoryChips from '../components/CategoryChips';
 import { useTabBar } from '../context/TabBarContext';
 import { agregarAlCarrito } from '../utils/agregarAlCarrito';
 import { MOCK_BANNERS } from '../utils/api';
-import { obtenerSucursalId } from '../utils/sucursal';
+import { obtenerSucursalDefaultId, obtenerSucursalPreferida } from '../utils/sucursal';
 import { supabase } from '../utils/supabase';
 import { useBanners } from '../utils/useBanners';
 
 const { width } = Dimensions.get('window');
 const PRIMARY = '#C21807';
 
-// Medidas del carrusel de banners (estilo Jumbo: el siguiente banner asoma)
-const SIDE = 16;                              // margen izquierdo
-const GAP = 16;                               // espacio entre banners
-const CARD_W = width - 30;                    // deja asomar el siguiente
-const CARD_H = Math.round(CARD_W / 1.6);      // proporción 1.6 : 1
+
+const SIDE = 16;                              
+const GAP = 16;                               
+const CARD_W = width - 30;                    
+const CARD_H = Math.round(CARD_W / 1.6);      
 const ITEM = CARD_W + GAP;
 const AUTOPLAY_MS = 4000;
 
@@ -59,14 +59,14 @@ function ProgressBars({ count, current, progress }) {
 }
 
 function BannerSlider() {
-  // Banners administrados desde el panel web (con MOCK_BANNERS como respaldo).
+  
   const banners = useBanners('home', MOCK_BANNERS);
   const [current, setCurrent] = useState(0);
   const [tick, setTick] = useState(0);
   const progress = useRef(new Animated.Value(0)).current;
   const flatRef = useRef(null);
 
-  // Autoplay: la barra se llena y, al terminar, pasa al siguiente banner
+  
   useEffect(() => {
     if (banners.length === 0) return;
     progress.setValue(0);
@@ -86,7 +86,7 @@ function BannerSlider() {
     return () => anim.stop();
   }, [current, tick, banners.length]);
 
-  // Si cambia la cantidad de banners, vuelve al primero.
+  
   useEffect(() => {
     setCurrent(0);
   }, [banners]);
@@ -118,7 +118,7 @@ function BannerSlider() {
           const subtitulo = item.subtitulo ?? item.subtitle ?? item.descripcion;
           const imagen = item.imagen_url ?? item.image_url;
 
-          // Estilo Jumbo: solo la imagen, el diseño ya trae el texto
+          
           if (imagen) {
             return (
               <View style={styles.bannerCard}>
@@ -133,7 +133,7 @@ function BannerSlider() {
             );
           }
 
-          // Sin imagen: fondo de color con texto y emoji
+          
           return (
             <View style={[styles.bannerCard, styles.bannerCardText, { backgroundColor: item.bg || PRIMARY }]}>
               <View style={styles.bannerText}>
@@ -180,6 +180,18 @@ const StaticHeader = React.memo(({ router, cartCount }) => (
   </View>
 ));
 
+const elegirPrecio = (filas, idSucursalDefault) => {
+  const activas = (filas || []).filter((f) => f.activo !== false);
+  if (activas.length === 0) return null;
+
+  const deDefault = activas.find((f) => f.id_sucursal === idSucursalDefault);
+  if (deDefault) return deDefault;
+
+  return activas.reduce((min, f) =>
+    Number(f.precio ?? Infinity) < Number(min.precio ?? Infinity) ? f : min
+  );
+};
+
 export default function HomeScreen() {
   const router = useRouter();
   const [products, setProducts] = useState([]);
@@ -222,49 +234,79 @@ export default function HomeScreen() {
     }, [cargarCartCount])
   );
 
+  // Con sucursal preferida: solo los productos de esa sucursal.
+  const cargarPorSucursal = async (idSucursal, q) => {
+    let query = supabase
+      .from('producto_sucursal')
+      .select('precio, stock, id_producto, productos!inner (id, nombre, imagen_url, id_categoria, activo)')
+      .eq('id_sucursal', idSucursal)
+      .eq('activo', true)
+      .eq('productos.activo', true);
+
+    if (q) {
+      query = query.ilike('productos.nombre', `%${q}%`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data || []).map((ps) => ({
+      id: ps.productos.id,
+      name: ps.productos.nombre,
+      price: Math.round(ps.precio ?? 0),
+      original_price: null,
+      image_url: ps.productos.imagen_url,
+      stock: ps.stock,
+      unit: '',
+    }));
+  };
+
+  // Sin sucursal preferida: todos los productos activos.
+  const cargarTodos = async (q) => {
+    const idSucursalDefault = await obtenerSucursalDefaultId();
+
+    let query = supabase
+      .from('productos')
+      .select('id, nombre, imagen_url, id_categoria, producto_sucursal (id_sucursal, precio, stock, activo)')
+      .eq('activo', true)
+      .order('nombre');
+
+    if (q) {
+      query = query.ilike('nombre', `%${q}%`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    return (data || []).map((p) => {
+      const fila = elegirPrecio(p.producto_sucursal, idSucursalDefault);
+      return {
+        id: p.id,
+        name: p.nombre,
+        price: fila ? Math.round(fila.precio ?? 0) : null,
+        original_price: null,
+        image_url: p.imagen_url,
+        stock: fila ? fila.stock : 0,
+        unit: '',
+      };
+    });
+  };
+
   const fetchProducts = useCallback(async (q = '') => {
-    // La lista vuelve al tope al recargar, así que la tab bar reaparece
+    
     showTabBar();
     setLoading(true);
     try {
-      const idSucursal = await obtenerSucursalId();
+      const idSucursal = await obtenerSucursalPreferida();
 
-      if (!idSucursal) {
-        setProducts([]);
-        return;
-      }
+      const lista = idSucursal
+        ? await cargarPorSucursal(idSucursal, q)
+        : await cargarTodos(q);
 
-      let query = supabase
-        .from('producto_sucursal')
-        .select('precio, stock, id_producto, productos!inner (id, nombre, imagen_url, id_categoria, activo)')
-        .eq('id_sucursal', idSucursal)
-        .eq('activo', true)
-        .eq('productos.activo', true);
-
-      if (q) {
-        query = query.ilike('productos.nombre', `%${q}%`);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error(error);
-        setProducts([]);
-      } else {
-        setProducts(
-          (data || []).map((ps) => ({
-            id: ps.productos.id,
-            name: ps.productos.nombre,
-            price: Math.round(ps.precio ?? 0),
-            original_price: null,
-            image_url: ps.productos.imagen_url,
-            stock: ps.stock,
-            unit: '',
-          }))
-        );
-      }
+      setProducts(lista);
     } catch (err) {
       console.error(err);
+      setProducts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -305,6 +347,8 @@ export default function HomeScreen() {
     const discountPct = hasDiscount
       ? Math.round((1 - item.price / item.original_price) * 100)
       : null;
+    const sinPrecio = item.price === null || item.price === undefined;
+    const noDisponible = item.stock === 0 || sinPrecio;
 
     return (
       <TouchableOpacity
@@ -328,20 +372,22 @@ export default function HomeScreen() {
           <Text style={styles.productUnit}>{item.unit}</Text>
           <View style={styles.productFooter}>
             <View>
-              <Text style={styles.productPrice}>${item.price.toLocaleString('es-CL')}</Text>
+              <Text style={styles.productPrice}>
+                {sinPrecio ? 'Consultar' : `$${item.price.toLocaleString('es-CL')}`}
+              </Text>
               {hasDiscount && (
                 <Text style={styles.originalPrice}>${item.original_price.toLocaleString('es-CL')}</Text>
               )}
             </View>
             <TouchableOpacity
-              style={[styles.addBtn, item.stock === 0 && styles.addBtnDisabled]}
+              style={[styles.addBtn, noDisponible && styles.addBtnDisabled]}
               onPress={() => handleAddToCart(item)}
-              disabled={item.stock === 0}
+              disabled={noDisponible}
             >
-              <Ionicons name={item.stock === 0 ? 'close' : 'add'} size={20} color="#fff" />
+              <Ionicons name={noDisponible ? 'close' : 'add'} size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-          {item.stock === 0 && <Text style={styles.outOfStock}>Sin stock</Text>}
+          {noDisponible && <Text style={styles.outOfStock}>Sin stock</Text>}
         </View>
       </TouchableOpacity>
     );
@@ -429,7 +475,7 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, color: '#333' },
 
-  // Banners (estilo Jumbo)
+  // Banners
   bannerContainer: { marginBottom: 8 },
   bannerCard: {
     width: CARD_W, height: CARD_H, borderRadius: 18,

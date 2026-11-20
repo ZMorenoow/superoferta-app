@@ -38,21 +38,21 @@ const formatHoraRetiro = (iso) => {
   return `${dia} ${hh} hrs`;
 };
 
-// Compara códigos ignorando ceros iniciales (UPC-A y EAN-13 del mismo producto).
+
 const normalizar = (c) => String(c ?? '').replace(/\D/g, '').replace(/^0+/, '');
 
-const PAUSA_TRAS_ESCANEO = 1200; // ms de espera después de cada escaneo
-const AUSENCIA_MINIMA = 1000;    // ms que el código debe desaparecer para contar otra vez
+const PAUSA_TRAS_ESCANEO = 1200; 
+const AUSENCIA_MINIMA = 1000;    
 
 const MOTIVOS = ['Sin stock', 'En mal estado', 'No lo encuentro'];
 
-const MIN_FOTOS = 1; // fotos mínimas de evidencia para poder finalizar
+const MIN_FOTOS = 1; 
 const MAX_FOTOS = 6;
 
 export default function PedidoScreen() {
   const router = useRouter();
 
-  // Si no hay pantalla anterior (p. ej. recarga directa en esta ruta), va al inicio.
+
   const volver = () => {
     if (router.canGoBack()) router.back();
     else router.replace('/picker');
@@ -60,7 +60,7 @@ export default function PedidoScreen() {
 
   const { id, pedido: pedidoParam } = useLocalSearchParams();
 
-  // Acepta ?id=<uuid> o el parámetro "pedido" (JSON) que ya mandaba la lista.
+
   let pedidoId = id;
   if (!pedidoId && pedidoParam) {
     try {
@@ -74,21 +74,21 @@ export default function PedidoScreen() {
   const [loading, setLoading] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
   const [escaneando, setEscaneando] = useState(false);
-  const [feedback, setFeedback] = useState(null); // { ok, texto }
+  const [feedback, setFeedback] = useState(null); 
   const procesando = useRef(false);
   const ultimaLectura = useRef({ codigo: null, t: 0 });
   const [permiso, pedirPermiso] = useCameraPermissions();
 
-  // Reporte de producto faltante
-  const [faltante, setFaltante] = useState(null); // item seleccionado
-  const [editando, setEditando] = useState(false); // true si ya era faltante y se está editando
+
+  const [faltante, setFaltante] = useState(null); 
+  const [editando, setEditando] = useState(false); 
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
   const [sugerencia, setSugerencia] = useState('');
 
-  // Evidencia fotográfica al finalizar
+
   const camaraRef = useRef(null);
   const [evidenciaAbierta, setEvidenciaAbierta] = useState(false);
-  const [fotos, setFotos] = useState([]); // [{ uri }]
+  const [fotos, setFotos] = useState([]); 
   const [tomando, setTomando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
 
@@ -97,7 +97,7 @@ export default function PedidoScreen() {
       setLoading(false);
       return;
     }
-    // RLS: el picker solo recibe el pedido si está asignado a él.
+
     const { data, error } = await supabase
       .from('pedidos')
       .select(`
@@ -138,7 +138,7 @@ export default function PedidoScreen() {
     setLoading(false);
   }, [pedidoId]);
 
-  // Carga al entrar y escucha cuando el cliente responde una sugerencia.
+ 
   useFocusEffect(
     useCallback(() => {
       cargar();
@@ -168,7 +168,7 @@ export default function PedidoScreen() {
   const completo = (i) => recogidas(i) >= i.cantidad;
   const esFaltante = (i) => i.estado === 'faltante';
 
-  // Sugerencias de reemplazo
+
   const sustPendiente = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'propuesta');
   const sustAceptada = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'aceptada');
   const sustActual = (i) => {
@@ -180,8 +180,6 @@ export default function PedidoScreen() {
     );
   };
 
-  // Un producto está "resuelto" si se recogió completo, o si es faltante y
-  // no queda ninguna sugerencia esperando respuesta del cliente.
   const resuelto = (i) => completo(i) || (esFaltante(i) && !sustPendiente(i));
   const completados = items.filter(resuelto).length;
   const todoListo = items.length > 0 && completados === items.length;
@@ -192,7 +190,7 @@ export default function PedidoScreen() {
     router.push({ pathname: '/picker/sustituto', params: { item: item.id } });
   };
 
-  // Al tocar el primer producto, el pedido pasa de "asignado" a "en preparación".
+
   const asegurarEnProceso = async () => {
     if (pedido?.estado !== 'asignado') return;
     const { error } = await supabase.rpc('avanzar_pedido', { p_pedido: pedidoId });
@@ -213,7 +211,7 @@ export default function PedidoScreen() {
     setEscaneando(true);
   };
 
-  // Suma 1 unidad en el servidor. Devuelve la nueva cantidad, 'completo' o null si falló.
+
   const registrarUnidad = async (item) => {
     setTrabajando(true);
     try {
@@ -221,7 +219,7 @@ export default function PedidoScreen() {
       const { data, error } = await supabase.rpc('escanear_unidad', { p_item: item.id });
       if (error) throw error;
       const fila = data?.[0];
-      if (!fila) return 'completo'; // ya estaba completo, no se sumó nada
+      if (!fila) return 'completo'; 
       await cargar();
       return fila.nueva_cantidad;
     } catch (e) {
@@ -237,25 +235,21 @@ export default function PedidoScreen() {
     const objetivo = normalizar(codigo);
     const ult = ultimaLectura.current;
 
-    // El mismo código sigue a la vista (o lo vieron hace poco): no cuenta de nuevo.
+
     const sigueEnPantalla = ult.codigo === objetivo && ahora - ult.t < AUSENCIA_MINIMA;
 
-    // Se refresca SIEMPRE: mientras el código esté frente a la cámara, el bloqueo se extiende.
+
     ultimaLectura.current = { codigo: objetivo, t: ahora };
 
     if (procesando.current || sigueEnPantalla) return;
     procesando.current = true;
 
     try {
-      // Puede haber varios ítems con el mismo código (ej: el faltante original
-      // y su reemplazo, que es el mismo producto). Se elige el más adecuado.
+
       const candidatos = items.filter(
         (i) => normalizar(i.productos?.codigo_barra) === objetivo
       );
 
-      // 1) el que aún se puede recoger (ni faltante ni completo)
-      // 2) cualquiera que no sea faltante (ej: ya completo)
-      // 3) el que sea (solo faltantes)
       const item =
         candidatos.find((i) => !esFaltante(i) && !completo(i)) ??
         candidatos.find((i) => !esFaltante(i)) ??
@@ -297,14 +291,14 @@ export default function PedidoScreen() {
         texto: `${item.productos?.nombre}: ${nueva} de ${item.cantidad}`,
       });
     } finally {
-      // La pausa se cuenta DESPUÉS de terminar de guardar, no antes.
+
       setTimeout(() => {
         procesando.current = false;
       }, PAUSA_TRAS_ESCANEO);
     }
   };
 
-  // Abre el modal. Si el item ya era faltante, carga su motivo y sugerencia para editarlos.
+
   const abrirFaltante = (item) => {
     setMotivo(item.motivo_faltante ?? MOTIVOS[0]);
     setSugerencia(item.sugerencia ?? '');
@@ -317,7 +311,7 @@ export default function PedidoScreen() {
     setFaltante(null);
   };
 
-  // Quita el faltante: el producto vuelve a estar pendiente de recoger.
+
   const quitarFaltante = async () => {
     if (!faltante) return;
     setTrabajando(true);
@@ -342,7 +336,7 @@ export default function PedidoScreen() {
     setTrabajando(true);
     try {
       await asegurarEnProceso();
-      // Si estaba editando, primero lo deja pendiente y luego lo vuelve a reportar
+
       if (eraEdicion) {
         const { error: e1 } = await supabase.rpc('revertir_faltante', { p_item: idItem });
         if (e1) throw e1;
@@ -358,7 +352,7 @@ export default function PedidoScreen() {
       setSugerencia('');
       await cargar();
 
-      // Primera vez que se reporta: ofrece sugerir un reemplazo en la pantalla aparte.
+
       if (!eraEdicion) {
         Alert.alert('Cliente avisado', '¿Quieres sugerirle un producto de reemplazo?', [
           { text: 'Ahora no', style: 'cancel' },
@@ -377,7 +371,7 @@ export default function PedidoScreen() {
     }
   };
 
-  // Paso previo a finalizar: abre la cámara para sacar las fotos de evidencia.
+
   const abrirEvidencia = async () => {
     if (!permiso?.granted) {
       const r = await pedirPermiso();
@@ -411,7 +405,7 @@ export default function PedidoScreen() {
 
   const quitarFoto = (idx) => setFotos((prev) => prev.filter((_, i) => i !== idx));
 
-  // Sube cada foto al bucket "evidencias" (ruta: <id_pedido>/<archivo>.jpg) y la registra.
+
   const subirEvidencias = async () => {
     const filas = [];
     for (let i = 0; i < fotos.length; i++) {
@@ -468,7 +462,7 @@ export default function PedidoScreen() {
 
   const yaCompletado = pedido?.estado === 'completado' || pedido?.estado === 'entregado';
 
-  // Lo que realmente se entrega = lo pagado menos lo que se va a reembolsar.
+
   const reembolso = Number(pedido?.reembolso_pendiente || 0);
   const totalEntregar = Number(pedido?.total || 0) - reembolso;
   const hayAjuste = reembolso !== 0;

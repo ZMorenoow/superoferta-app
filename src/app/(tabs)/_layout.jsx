@@ -17,7 +17,7 @@ const TABS = [
   { name: 'perfil',     title: 'Perfil',     icon: 'person-outline',   iconActive: 'person' },
 ];
 
-// Pestañas que exigen sesión iniciada
+
 const PROTECTED_TABS = ['categorias', 'cupones', 'ofertas'];
 
 function AnimatedTabBar({ state }) {
@@ -26,7 +26,7 @@ function AnimatedTabBar({ state }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Al cambiar de pestaña, la barra siempre vuelve a aparecer
+
   useEffect(() => {
     showTabBar();
   }, [state.index, showTabBar]);
@@ -62,8 +62,8 @@ function AnimatedTabBar({ state }) {
         styles.tabBar,
         {
           bottom: BASE_BOTTOM + insets.bottom,
-          opacity,                        // se esfuma
-          transform: [{ translateY }],    // y baja fuera de pantalla
+          opacity,                        
+          transform: [{ translateY }],
         },
       ]}
     >

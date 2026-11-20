@@ -1,8 +1,5 @@
 import { supabase } from './supabase';
 
-// Agrega un producto al carrito guardado en Supabase.
-// item = { id, price }
-// Devuelve 'ok' | 'login' | 'error'
 export async function agregarAlCarrito(item) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 'login';

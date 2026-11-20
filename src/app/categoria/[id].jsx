@@ -3,8 +3,8 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator, Alert, FlatList, ScrollView,
-    StyleSheet, Text, TouchableOpacity, View,
+  ActivityIndicator, Alert, FlatList, ScrollView,
+  StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import useSucursalId from '../../hooks/useSucursalId';
@@ -20,11 +20,10 @@ export default function CategoriaScreen() {
 
   const [category, setCategory] = useState(null);
   const [subs, setSubs] = useState([]);
-  const [sub, setSub] = useState(null); // null = Todo
+  const [sub, setSub] = useState(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Categoría + subcategorías
   useEffect(() => {
     (async () => {
       const [cat, hijos] = await Promise.all([
@@ -37,7 +36,6 @@ export default function CategoriaScreen() {
     })();
   }, [id]);
 
-  // Productos con precio y stock de la sucursal
   useEffect(() => {
     if (loadingSucursal) return;
     if (!idSucursal) {

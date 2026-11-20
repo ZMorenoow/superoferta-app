@@ -31,12 +31,11 @@ export default function SustitutoScreen() {
   const [nota, setNota] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-  // Un ref bloquea al instante el doble toque en "Enviar propuesta".
+
   const enCurso = useRef(false);
-  // Número de búsqueda: si llega una respuesta vieja, se descarta.
+  
   const busquedaActual = useRef(0);
 
-  // Carga el item faltante (para saber sucursal, categoría y cantidad)
   useEffect(() => {
     (async () => {
       const { data, error } = await supabase
@@ -71,15 +70,13 @@ export default function SustitutoScreen() {
         .eq('id_sucursal', item.pedidos.id_sucursal)
         .eq('activo', true)
         .gt('stock', 0)
-        .neq('id_producto', item.id_producto) // no se puede reemplazar por el mismo producto
+        .neq('id_producto', item.id_producto) 
         .limit(30);
 
       if (texto.trim()) q = q.ilike('productos.nombre', `%${texto.trim()}%`);
       else q = q.eq('productos.id_categoria', item.productos.id_categoria);
 
       const { data, error } = await q;
-
-      // Llegó una búsqueda más nueva mientras esta cargaba: se ignora.
       if (numero !== busquedaActual.current) return;
 
       if (error) console.error(error);

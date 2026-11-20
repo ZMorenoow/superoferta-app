@@ -11,8 +11,6 @@ const VERDE = '#1B6B3A';
 const formatCLP = (n) => `$${Number(n).toLocaleString('es-CL')}`;
 const esperar = (ms) => new Promise((res) => setTimeout(res, ms));
 
-// Estados del pedido que significan "ya está pagado".
-// El trigger asigna el pedido apenas pasa a 'pagado', así que casi siempre se llega acá con 'asignado'.
 const ESTADOS_PAGADOS = ['pagado', 'asignado', 'en_proceso', 'completado'];
 
 // Espera total máxima a que se guarde la confirmación: MAX_INTENTOS * ESPERA_MS (≈ 10 s).
@@ -43,7 +41,7 @@ export default function OrderStatusScreen() {
     };
 
     const leerEstado = async () => {
-      // El estado se lee SIEMPRE desde Supabase. La URL del WebView no se usa como prueba de pago.
+
       for (let intento = 0; intento < MAX_INTENTOS; intento++) {
         const { data: pedidoDb, error: pedidoError } = await supabase
           .from('pedidos')
@@ -67,13 +65,10 @@ export default function OrderStatusScreen() {
           return;
         }
 
-        // La fuente de verdad del cobro es el pago. El pedido solo debe estar en un estado "pagado o posterior".
         const pagoAutorizado = pagoDb?.estado === 'autorizado';
         const pedidoPagado = ESTADOS_PAGADOS.includes(pedidoDb.estado);
 
-        // Se espera un poco si la confirmación aún se está guardando:
-        // - el pago sigue "iniciado", o
-        // - el pago ya está autorizado pero el pedido todavía no cambió de estado.
+
         const confirmando = pagoDb?.estado === 'iniciado' || (pagoAutorizado && !pedidoPagado);
         if (confirmando && intento < MAX_INTENTOS - 1) {
           await esperar(ESPERA_MS);
@@ -85,11 +80,10 @@ export default function OrderStatusScreen() {
           setDetalle({ total: pedidoDb.total, codigo: pagoDb.codigo_autorizacion });
           setResultado('pagado');
         } else if (confirmando) {
-          // Después de esperar, el pago sigue "iniciado" (o autorizado pero el pedido no cambió):
-          // no se puede afirmar que no hubo cargo, así que se muestra "No pudimos confirmar".
+
           setResultado('error');
         } else {
-          // Pago rechazado, anulado o inexistente: aquí sí se sabe que no hubo cargo.
+
           setResultado('no_pagado');
         }
         setCargando(false);

@@ -4,16 +4,16 @@ import { Animated } from 'react-native';
 
 const TabBarContext = createContext(null);
 
-const SCROLL_THRESHOLD = 8;  // px mínimos de movimiento para reaccionar
-const HIDE_AFTER = 50;       // no ocultar hasta haber bajado esto desde el tope
-const HIDDEN_Y = 140;        // suficiente para sacarla de pantalla (incluye safe area)
+const SCROLL_THRESHOLD = 8;  
+const HIDE_AFTER = 50;       
+const HIDDEN_Y = 140;        
 
 export function TabBarProvider({ children }) {
   const translateY = useRef(new Animated.Value(0)).current;
   const lastOffset = useRef(0);
   const visible = useRef(true);
 
-  // Se esfuma mientras baja: opacidad 1 → 0 en la primera mitad del recorrido
+
   const opacity = useRef(
     translateY.interpolate({
       inputRange: [0, HIDDEN_Y / 2],
@@ -36,14 +36,14 @@ export function TabBarProvider({ children }) {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const currentOffset = contentOffset.y;
 
-    // Rebote de iOS arriba: mostrar la barra y reiniciar
+    
     if (currentOffset <= 0) {
       setVisible(true);
       lastOffset.current = 0;
       return;
     }
 
-    // Rebote de iOS abajo: ignorar
+    
     const maxOffset = contentSize.height - layoutMeasurement.height;
     if (currentOffset >= maxOffset) {
       lastOffset.current = currentOffset;
@@ -54,15 +54,15 @@ export function TabBarProvider({ children }) {
     if (Math.abs(diff) < SCROLL_THRESHOLD) return;
 
     if (diff > 0 && currentOffset > HIDE_AFTER) {
-      setVisible(false); // bajando → ocultar
+      setVisible(false); 
     } else if (diff < 0) {
-      setVisible(true);  // subiendo → mostrar
+      setVisible(true); 
     }
 
     lastOffset.current = currentOffset;
   }, [setVisible]);
 
-  // Fuerza que la barra reaparezca y reinicia la posición de scroll guardada
+
   const showTabBar = useCallback(() => {
     lastOffset.current = 0;
     setVisible(true);

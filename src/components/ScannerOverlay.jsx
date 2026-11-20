@@ -14,8 +14,6 @@ const ESQUINA = 36;
 const GROSOR = 5;
 const MASCARA = 'rgba(0,0,0,0.65)';
 
-// Capa visual del escáner: fondo oscuro con una ventana clara al centro,
-// esquinas que cambian de color según el resultado y una línea que recorre el marco.
 export default function ScannerOverlay({ completados, total, feedback, onClose }) {
   const linea = useRef(new Animated.Value(0)).current;
 
@@ -34,13 +32,13 @@ export default function ScannerOverlay({ completados, total, feedback, onClose }
     return () => anim.stop();
   }, [linea]);
 
-  // Blanco en espera, verde si se registró, rojo si hubo un problema
+
   const colorMarco = !feedback ? '#fff' : feedback.ok ? VERDE_BRILLO : ROJO_BRILLO;
   const translateY = linea.interpolate({ inputRange: [0, 1], outputRange: [10, MARCO_H - 12] });
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* Máscara oscura con una ventana transparente al centro */}
+      
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <View style={styles.mascara} />
         <View style={styles.filaCentro}>

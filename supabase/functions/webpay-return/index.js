@@ -1,7 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// URL "falsa" a la que se redirige al terminar. La app la intercepta en el WebView
-// y nunca llega a cargarse. La app debe leer el estado real desde Supabase.
 const RESULT_URL = Deno.env.get('PAGO_RESULT_URL') ?? 'https://superoferta.local/pago-resultado';
 
 const redirect = (estado, idPedido) => {
@@ -11,14 +9,13 @@ const redirect = (estado, idPedido) => {
   return new Response(null, { status: 302, headers: { Location: url.toString() } });
 };
 
-// Devuelve el stock reservado y deja el pedido cancelado (solo si no tiene pago autorizado).
+
 const liberarPedido = async (admin, idPedido) => {
   const { error } = await admin.rpc('liberar_pedido', { p_pedido: idPedido });
   if (error) console.error('No se pudo liberar el pedido', idPedido, error);
 };
 
-// Marca como 'anulado' un pago que sigue 'iniciado' (cancelación o tiempo agotado en Webpay).
-// Nunca toca un pago ya autorizado o rechazado. Así la app sabe de inmediato que no hubo cargo.
+
 const anularPagoIniciado = async (admin, columna, valor) => {
   const { error } = await admin
     .from('pagos')
@@ -28,7 +25,6 @@ const anularPagoIniciado = async (admin, columna, valor) => {
   if (error) console.error('No se pudo anular el pago', columna, valor, error);
 };
 
-// Vacía el carrito del cliente dueño del pedido. Si falla, no rompe el flujo del pago.
 const vaciarCarrito = async (admin, idPedido) => {
   try {
     const { data: pedido } = await admin
@@ -61,20 +57,19 @@ Deno.serve(async (req) => {
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // Webpay puede volver por GET (query) o por POST (formulario).
+
   const params = Object.fromEntries(new URL(req.url).searchParams);
   if (req.method === 'POST') {
     try {
       const form = await req.formData();
       for (const [clave, valor] of form.entries()) params[clave] = String(valor);
     } catch (_) {
-      // sin cuerpo de formulario
+
     }
   }
   const { token_ws, TBK_TOKEN, TBK_ID_SESION } = params;
 
   try {
-    // Caso 1: el cliente canceló en el formulario de Webpay.
     if (TBK_TOKEN) {
       const { data: pago } = await admin
         .from('pagos')
@@ -87,7 +82,6 @@ Deno.serve(async (req) => {
       return redirect('cancelado', idPedido);
     }
 
-    // Caso 2: se acabó el tiempo del formulario (solo llega TBK_ID_SESION = id del pedido).
     if (!token_ws) {
       if (TBK_ID_SESION) {
         await liberarPedido(admin, TBK_ID_SESION);
@@ -97,7 +91,6 @@ Deno.serve(async (req) => {
       return redirect('error');
     }
 
-    // Caso 3: el cliente pagó o fue rechazado -> hay que confirmar con Transbank.
     const { data: pago } = await admin
       .from('pagos')
       .select('id, id_pedido, monto, estado, orden_compra')
@@ -106,7 +99,7 @@ Deno.serve(async (req) => {
 
     if (!pago) return redirect('error');
 
-    // Si ya se procesó (por ejemplo, el cliente recargó la página), no se confirma dos veces.
+
     if (pago.estado !== 'iniciado') return redirect(pago.estado, pago.id_pedido);
 
     const tbkRes = await fetch(
@@ -122,7 +115,6 @@ Deno.serve(async (req) => {
     );
 
     if (!tbkRes.ok) {
-      // No se cambia el estado: pudo haberse autorizado igual. Queda 'iniciado' para revisarlo.
       console.error('Transbank commit falló', tbkRes.status, await tbkRes.text());
       return redirect('error', pago.id_pedido);
     }
@@ -161,11 +153,9 @@ Deno.serve(async (req) => {
         console.error('Pago autorizado, pero el pedido ya no estaba pendiente. Revisar a mano.', pago);
       }
 
-      // El cobro ya se hizo: el carrito se vacía acá, en el servidor,
-      // aunque la persona cierre la app antes de ver la pantalla de éxito.
+
       await vaciarCarrito(admin, pago.id_pedido);
     } else {
-      // Pago rechazado: se devuelve el stock reservado.
       await liberarPedido(admin, pago.id_pedido);
     }
 

@@ -2,14 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import EvidenciaGaleria from '../../components/EvidenciaGaleria';
@@ -129,9 +129,7 @@ export default function DetallePedidoScreen() {
   const esFaltante = (i) => i.estado === 'faltante';
   const escaneadas = (i) => Number(i.cantidad_escaneada) || 0;
 
-  // Productos del pedido original que se recogieron normalmente
   const recogidos = items.filter((i) => !esReemplazo(i) && !esFaltante(i));
-  // Productos que se reportaron como faltantes (con su reemplazo, si hubo)
   const faltantes = items
     .filter((i) => !esReemplazo(i) && esFaltante(i))
     .map((f) => ({

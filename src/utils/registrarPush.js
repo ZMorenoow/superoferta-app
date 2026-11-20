@@ -1,11 +1,3 @@
-// utils/registrarPush.js
-// Pide permiso de notificaciones, obtiene el token de Expo y lo guarda en perfiles.expo_push_token.
-//
-// Instalar:  npx expo install expo-notifications expo-device expo-constants
-// Llamar:    await registrarPush()  justo después de iniciar sesión (y al abrir la app con sesión).
-//
-// Importante: las notificaciones remotas NO funcionan en Expo Go (Android, SDK 53+).
-// Hay que probar con un development build (eas build --profile development).
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
@@ -24,7 +16,7 @@ Notifications.setNotificationHandler({
 
 export async function registrarPush() {
   try {
-    if (!Device.isDevice) return null; // los emuladores no reciben push
+    if (!Device.isDevice) return null; 
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;

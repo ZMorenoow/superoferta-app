@@ -48,11 +48,11 @@ export default function AppSplashScreen({ onFinish }) {
     ]);
 
     animation.start(() => {
-      // Llamamos onFinish solo si el componente todavía está montado
+      
       onFinish?.();
     });
 
-    // Limpiamos la animación si el componente se desmonta antes de terminar
+    
     return () => animation.stop();
   }, []);
 

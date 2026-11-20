@@ -7,16 +7,15 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
-  Platform,
+  Pressable,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import CampoTexto from '../components/CampoTexto';
 import { supabase } from '../utils/supabase';
-
 
 const PRIMARY = '#C21807';
 
@@ -116,32 +115,34 @@ export default function LoginScreen() {
         visible={modalVisible}
         animationType="slide"
         transparent
+        statusBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
+          <Pressable style={{ flex: 1 }} onPress={() => setModalVisible(false)} />
+
+          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+            <View style={styles.handle} />
             <Text style={styles.modalTitle}>Iniciar sesión</Text>
             <Text style={styles.modalSubtitle}>Ingresa tus credenciales</Text>
 
-            <TextInput
-              style={styles.input}
+            <CampoTexto
+              icono="mail-outline"
               placeholder="Correo electrónico"
-              placeholderTextColor="#aaa"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
               value={email}
               onChangeText={setEmail}
             />
-            <TextInput
-              style={styles.input}
+            <CampoTexto
+              icono="lock-closed-outline"
               placeholder="Contraseña"
-              placeholderTextColor="#aaa"
-              secureTextEntry
+              secure
               value={password}
               onChangeText={setPassword}
+              returnKeyType="go"
+              onSubmitEditing={handleLogin}
             />
 
             <TouchableOpacity
@@ -193,10 +194,7 @@ const styles = StyleSheet.create({
   skipText: { fontSize: 14, color: PRIMARY, fontWeight: '600', textAlign: 'center', paddingVertical: 8 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, gap: 12 },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 8 },
   modalTitle: { fontSize: 22, fontWeight: '900', color: '#1a1a1a' },
   modalSubtitle: { fontSize: 14, color: '#888', marginBottom: 4 },
-  input: {
-    borderWidth: 1.5, borderColor: '#e0e0e0', borderRadius: 12,
-    paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: '#1a1a1a', backgroundColor: '#fafafa',
-  },
 });

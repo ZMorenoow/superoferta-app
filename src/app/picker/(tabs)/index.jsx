@@ -35,13 +35,12 @@ const formatHoraRetiro = (iso) => {
   return `${dia} ${hh} hrs`;
 };
 
-// Mismas reglas que el detalle del pedido, para que ambas pantallas cuenten igual.
 const esFaltante = (i) => i.estado === 'faltante';
 const sustPendiente = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'propuesta');
 const completo = (i) => (i.cantidad_escaneada || 0) >= i.cantidad;
-// Resuelto: recogido completo, o faltante sin sugerencia esperando respuesta del cliente.
+
 const resuelto = (i) => completo(i) || (esFaltante(i) && !sustPendiente(i));
-// Lo que realmente se entrega = lo pagado menos lo que se va a reembolsar.
+
 const totalEntregar = (p) => Number(p.total || 0) - Number(p.reembolso_pendiente || 0);
 
 export default function PickerHome() {
@@ -72,7 +71,6 @@ export default function PickerHome() {
       return;
     }
 
-    // RLS ya limita esto a los pedidos asignados a este picker.
     const { data, error } = await supabase
       .from('pedido_picker')
       .select(`
@@ -103,7 +101,6 @@ export default function PickerHome() {
       console.error('Error cargando pedidos del picker', error);
     } else {
       const lista = (data || []).filter((a) => a.pedidos);
-      // Primero lo que se retira antes; sin hora van al final; a igual hora, orden de asignación.
       const t = (a) =>
         a.pedidos.hora_retiro ? new Date(a.pedidos.hora_retiro).getTime() : Infinity;
       lista.sort(
@@ -117,7 +114,6 @@ export default function PickerHome() {
     setRefreshing(false);
   }, [router]);
 
-  // Se actualiza al volver a la pantalla y cada 30 s para ver pedidos nuevos.
   useFocusEffect(
     useCallback(() => {
       cargar();
@@ -126,7 +122,6 @@ export default function PickerHome() {
     }, [cargar])
   );
 
-  // Unidades por preparar: los faltantes no cuentan (el reemplazo aceptado sí, como ítem aparte).
   const totalUnidades = asignaciones.reduce(
     (s, a) =>
       s +

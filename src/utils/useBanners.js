@@ -1,7 +1,3 @@
-// utils/useBanners.js
-// Carga los banners activos desde Supabase ('onboarding' o 'home').
-// Si no hay internet, hay un error o todavía no se creó ninguno,
-// usa el arreglo `fallback` (por ejemplo MOCK_BANNERS) para que la app nunca quede vacía.
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
@@ -26,7 +22,6 @@ export function useBanners(ubicacion, fallback = []) {
     return () => {
       vivo = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ubicacion]);
 
   return banners;

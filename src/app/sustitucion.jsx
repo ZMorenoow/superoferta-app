@@ -46,9 +46,9 @@ export default function SustitucionScreen() {
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [respondiendo, setRespondiendo] = useState(null); // id de la sugerencia en curso
+  const [respondiendo, setRespondiendo] = useState(null); 
 
-  // Un ref bloquea al instante; useState tarda un render y deja pasar el segundo toque.
+
   const enCurso = useRef(false);
 
   const cargar = useCallback(async () => {
@@ -135,7 +135,7 @@ export default function SustitucionScreen() {
           {pendientes.map(({ item, sust }) => {
             const diff =
               sust.precio_unitario * sust.cantidad - item.precio_unitario * item.cantidad;
-            const ocupado = respondiendo !== null; // apaga todos los botones
+            const ocupado = respondiendo !== null; 
             const esteCargando = respondiendo === sust.id;
 
             return (
