@@ -1,70 +1,188 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTabBar } from '../../context/TabBarContext';
+import { supabase } from '../../utils/supabase';
 
-const CUPONES = [
-  { id: '1', discount: '20%', description: 'En toda la sección Frutas y Verduras', expiry: '07 oct', min: '$5.000', activated: false },
-  { id: '2', discount: '$1.000', description: 'En compras sobre $15.000', expiry: '29 sep', min: '$15.000', activated: true },
-  { id: '3', discount: '15%', description: 'En productos lácteos seleccionados', expiry: '02 oct', min: '$3.000', activated: false },
-  { id: '4', discount: '$500', description: 'En bebidas 1.5L o más', expiry: '01 oct', min: '$2.000', activated: true },
-  { id: '5', discount: '2x1', description: 'En pan marraqueta todos los días', expiry: '25 sep', min: null, activated: false },
-];
+const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
+
+const formatFecha = (iso) =>
+  iso
+    ? new Date(iso).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })
+    : null;
 
 export default function CuponesScreen() {
+  const router = useRouter();
   const { handleScroll } = useTabBar();
+  const [cupones, setCupones] = useState([]);
+  const [activos, setActivos] = useState([]); // ids de cupones activados por el usuario
+  const [loading, setLoading] = useState(true);
+  const [procesando, setProcesando] = useState(null);
+  const [mensaje, setMensaje] = useState(null); // { tipo: 'ok' | 'error', texto }
+
+  const cargar = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('cupones')
+      .select('id, codigo, descripcion, tipo, valor, minimo_compra, vence_en, id_categoria, categorias (nombre, emoji)')
+      .order('vence_en', { ascending: true, nullsFirst: false });
+
+    if (error) console.error('Error cargando cupones', error);
+
+    let idsActivos = [];
+    let idsUsados = [];
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: mios } = await supabase
+        .from('cupones_usuario')
+        .select('id_cupon, usado_en')
+        .eq('id_usuario', user.id);
+      idsActivos = (mios || []).filter((m) => !m.usado_en).map((m) => m.id_cupon);
+      idsUsados = (mios || []).filter((m) => m.usado_en).map((m) => m.id_cupon);
+    }
+
+    setCupones((data || []).filter((c) => !idsUsados.includes(c.id)));
+    setActivos(idsActivos);
+    setLoading(false);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      cargar();
+    }, [cargar])
+  );
+
+  const alternar = async (cupon) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const yaActivo = activos.includes(cupon.id);
+    setProcesando(cupon.id);
+    setMensaje(null);
+
+    const { error } = await supabase.rpc(
+      yaActivo ? 'desactivar_cupon' : 'activar_cupon',
+      { p_id_cupon: cupon.id }
+    );
+
+    if (error) {
+      setMensaje({ tipo: 'error', texto: error.message || 'No se pudo actualizar el cupón' });
+    } else if (!yaActivo) {
+      setMensaje({ tipo: 'ok', texto: 'Cupón activado. Se aplicará en tu carrito.' });
+    }
+
+    await cargar();
+    setProcesando(null);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Mis Cupones</Text>
-        <Text style={styles.subtitle}>{CUPONES.length} cupones disponibles</Text>
+        <Text style={styles.subtitle}>
+          {cupones.length} {cupones.length === 1 ? 'cupón disponible' : 'cupones disponibles'}
+        </Text>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.list}
-        showsVerticalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-      >
-        {CUPONES.map((cupon) => (
-          <View key={cupon.id} style={styles.card}>
-            {/* Lado izquierdo — descuento */}
-            <View style={[styles.discountSide, cupon.activated && styles.discountSideActive]}>
-              <Text style={styles.discountText}>{cupon.discount}</Text>
-              <Text style={styles.discountLabel}>dcto.</Text>
+      {loading ? (
+        <ActivityIndicator size="large" color="#ED1C24" style={{ marginTop: 40 }} />
+      ) : (
+        <ScrollView
+          contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+          {mensaje && (
+            <View style={[styles.mensaje, mensaje.tipo === 'ok' ? styles.mensajeOk : styles.mensajeError]}>
+              <Ionicons
+                name={mensaje.tipo === 'ok' ? 'checkmark-circle' : 'alert-circle'}
+                size={18}
+                color={mensaje.tipo === 'ok' ? '#15803d' : '#ED1C24'}
+              />
+              <Text style={[styles.mensajeText, { color: mensaje.tipo === 'ok' ? '#15803d' : '#ED1C24' }]}>
+                {mensaje.texto}
+              </Text>
             </View>
+          )}
 
-            {/* Separador punteado */}
-            <View style={styles.separator}>
-              <View style={styles.circleTop} />
-              <View style={styles.dashedLine} />
-              <View style={styles.circleBottom} />
+          {cupones.length === 0 && (
+            <View style={styles.empty}>
+              <Ionicons name="pricetags-outline" size={64} color="#d8d8d8" />
+              <Text style={styles.emptyText}>No hay cupones disponibles por ahora</Text>
             </View>
+          )}
 
-            {/* Lado derecho — info */}
-            <View style={styles.infoSide}>
-              <Text style={styles.description}>{cupon.description}</Text>
-              {cupon.min && (
-                <Text style={styles.min}>Compra mínima: {cupon.min}</Text>
-              )}
-              <View style={styles.footer}>
-                <View style={styles.expiryBadge}>
-                  <Ionicons name="time-outline" size={11} color="#888" />
-                  <Text style={styles.expiry}>Vence {cupon.expiry}</Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.activateBtn, cupon.activated && styles.activatedBtn]}
-                >
-                  <Text style={[styles.activateBtnText, cupon.activated && styles.activatedBtnText]}>
-                    {cupon.activated ? '✓ Activado' : 'Activar'}
+          {cupones.map((cupon) => {
+            const activado = activos.includes(cupon.id);
+            const esPorcentaje = cupon.tipo === 'porcentaje';
+            const fecha = formatFecha(cupon.vence_en);
+            const categoria = cupon.categorias
+              ? `${cupon.categorias.emoji ?? ''} ${cupon.categorias.nombre}`.trim()
+              : 'Toda la tienda';
+
+            return (
+              <View key={cupon.id} style={styles.card}>
+                {/* Lado izquierdo: descuento */}
+                <View style={[styles.discountSide, activado && styles.discountSideActive]}>
+                  <Text style={styles.discountText}>
+                    {esPorcentaje ? `${cupon.valor}%` : formatCLP(cupon.valor)}
                   </Text>
-                </TouchableOpacity>
+                  <Text style={styles.discountLabel}>dcto.</Text>
+                </View>
+
+                {/* Separador punteado */}
+                <View style={styles.separator}>
+                  <View style={styles.circleTop} />
+                  <View style={styles.dashedLine} />
+                  <View style={styles.circleBottom} />
+                </View>
+
+                {/* Lado derecho: info */}
+                <View style={styles.infoSide}>
+                  <View style={styles.categoriaChip}>
+                    <Text style={styles.categoriaText}>{categoria}</Text>
+                  </View>
+                  <Text style={styles.description}>{cupon.descripcion || cupon.codigo}</Text>
+                  {cupon.minimo_compra > 0 && (
+                    <Text style={styles.min}>Compra mínima: {formatCLP(cupon.minimo_compra)}</Text>
+                  )}
+                  <View style={styles.footer}>
+                    <View style={styles.expiryBadge}>
+                      <Ionicons name="time-outline" size={11} color="#888" />
+                      <Text style={styles.expiry}>{fecha ? `Vence ${fecha}` : 'Sin vencimiento'}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.activateBtn, activado && styles.activatedBtn]}
+                      onPress={() => alternar(cupon)}
+                      disabled={procesando === cupon.id}
+                    >
+                      {procesando === cupon.id ? (
+                        <ActivityIndicator size="small" color={activado ? '#1B6B3A' : '#fff'} />
+                      ) : (
+                        <Text style={[styles.activateBtnText, activado && styles.activatedBtnText]}>
+                          {activado ? '✓ Activado' : 'Activar'}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
               </View>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
+            );
+          })}
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
@@ -74,7 +192,19 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   title: { fontSize: 26, fontWeight: '800', color: '#1a1a1a' },
   subtitle: { fontSize: 13, color: '#888', marginTop: 2 },
-  list: { paddingHorizontal: 16, paddingBottom: 80 },
+  list: { paddingHorizontal: 16, paddingBottom: 120 },
+
+  mensaje: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: 12, marginBottom: 12,
+  },
+  mensajeOk: { backgroundColor: '#dcfce7' },
+  mensajeError: { backgroundColor: '#fdecea' },
+  mensajeText: { fontSize: 13, fontWeight: '700', flex: 1 },
+
+  empty: { alignItems: 'center', marginTop: 60, gap: 10 },
+  emptyText: { fontSize: 14, color: '#aaa' },
+
   card: {
     flexDirection: 'row', backgroundColor: '#fff',
     borderRadius: 16, marginBottom: 12, overflow: 'hidden',
@@ -82,12 +212,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
   discountSide: {
-    width: 80, backgroundColor: '#ED1C24',
+    width: 84, backgroundColor: '#ED1C24',
     alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 20, paddingHorizontal: 4,
   },
   discountSideActive: { backgroundColor: '#FBB03B' },
-  discountText: { fontSize: 22, fontWeight: '900', color: '#fff' },
+  discountText: { fontSize: 20, fontWeight: '900', color: '#fff', textAlign: 'center' },
   discountLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },
   separator: { width: 20, alignItems: 'center', justifyContent: 'center' },
   circleTop: {
@@ -103,14 +233,19 @@ const styles = StyleSheet.create({
     borderLeftColor: '#e0e0e0', borderStyle: 'dashed',
   },
   infoSide: { flex: 1, padding: 14, justifyContent: 'space-between' },
+  categoriaChip: {
+    alignSelf: 'flex-start', backgroundColor: '#fdecea',
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginBottom: 6,
+  },
+  categoriaText: { fontSize: 11, fontWeight: '700', color: '#C21807' },
   description: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', marginBottom: 4, lineHeight: 18 },
   min: { fontSize: 11, color: '#888', marginBottom: 8 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   expiryBadge: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   expiry: { fontSize: 11, color: '#888' },
   activateBtn: {
-    backgroundColor: '#FF5A18', paddingHorizontal: 14,
-    paddingVertical: 6, borderRadius: 20,
+    backgroundColor: '#FF5A18', paddingHorizontal: 14, minWidth: 84,
+    paddingVertical: 6, borderRadius: 20, alignItems: 'center',
   },
   activatedBtn: { backgroundColor: '#e8f5ed' },
   activateBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },

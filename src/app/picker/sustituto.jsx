@@ -6,6 +6,7 @@ import {
   Alert,
   FlatList,
   Image,
+  KeyboardAvoidingView,
   StyleSheet,
   Text,
   TextInput,
@@ -31,9 +32,8 @@ export default function SustitutoScreen() {
   const [nota, setNota] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-
   const enCurso = useRef(false);
-  
+
   const busquedaActual = useRef(0);
 
   useEffect(() => {
@@ -70,7 +70,7 @@ export default function SustitutoScreen() {
         .eq('id_sucursal', item.pedidos.id_sucursal)
         .eq('activo', true)
         .gt('stock', 0)
-        .neq('id_producto', item.id_producto) 
+        .neq('id_producto', item.id_producto)
         .limit(30);
 
       if (texto.trim()) q = q.ilike('productos.nombre', `%${texto.trim()}%`);
@@ -180,6 +180,7 @@ export default function SustitutoScreen() {
           data={resultados}
           keyExtractor={(r) => r.productos.id}
           renderItem={renderResultado}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ padding: 16, paddingBottom: elegido ? 260 : 24 }}
           ListEmptyComponent={
             <Text style={styles.vacio}>No hay productos con stock para mostrar.</Text>
@@ -188,54 +189,56 @@ export default function SustitutoScreen() {
       )}
 
       {elegido && (
-        <View style={styles.panel}>
-          <Text style={styles.panelTitulo} numberOfLines={1}>
-            {elegido.productos.nombre}
-          </Text>
+        <KeyboardAvoidingView behavior="padding" style={styles.panelWrap}>
+          <View style={styles.panel}>
+            <Text style={styles.panelTitulo} numberOfLines={1}>
+              {elegido.productos.nombre}
+            </Text>
 
-          <View style={styles.fila}>
-            <Text style={styles.sub}>Cantidad</Text>
-            <View style={styles.stepper}>
-              <TouchableOpacity
-                disabled={enviando}
-                onPress={() => setCantidad((c) => Math.max(1, c - 1))}
-              >
-                <Ionicons name="remove-circle-outline" size={28} color={PRIMARY} />
-              </TouchableOpacity>
-              <Text style={styles.cant}>{cantidad}</Text>
-              <TouchableOpacity
-                disabled={enviando}
-                onPress={() => setCantidad((c) => Math.min(elegido.stock, c + 1))}
-              >
-                <Ionicons name="add-circle-outline" size={28} color={PRIMARY} />
-              </TouchableOpacity>
+            <View style={styles.fila}>
+              <Text style={styles.sub}>Cantidad</Text>
+              <View style={styles.stepper}>
+                <TouchableOpacity
+                  disabled={enviando}
+                  onPress={() => setCantidad((c) => Math.max(1, c - 1))}
+                >
+                  <Ionicons name="remove-circle-outline" size={28} color={PRIMARY} />
+                </TouchableOpacity>
+                <Text style={styles.cant}>{cantidad}</Text>
+                <TouchableOpacity
+                  disabled={enviando}
+                  onPress={() => setCantidad((c) => Math.min(elegido.stock, c + 1))}
+                >
+                  <Ionicons name="add-circle-outline" size={28} color={PRIMARY} />
+                </TouchableOpacity>
+              </View>
             </View>
+
+            <TextInput
+              style={styles.notaInput}
+              placeholder="Mensaje para el cliente (opcional)"
+              placeholderTextColor="#aaa"
+              value={nota}
+              onChangeText={setNota}
+              maxLength={150}
+              editable={!enviando}
+            />
+
+            <TouchableOpacity
+              style={[styles.btn, enviando && { opacity: 0.6 }]}
+              onPress={enviar}
+              disabled={enviando}
+            >
+              {enviando ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.btnTexto}>
+                  Enviar propuesta · {formatCLP(elegido.precio * cantidad)}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
-
-          <TextInput
-            style={styles.notaInput}
-            placeholder="Mensaje para el cliente (opcional)"
-            placeholderTextColor="#aaa"
-            value={nota}
-            onChangeText={setNota}
-            maxLength={150}
-            editable={!enviando}
-          />
-
-          <TouchableOpacity
-            style={[styles.btn, enviando && { opacity: 0.6 }]}
-            onPress={enviar}
-            disabled={enviando}
-          >
-            {enviando ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.btnTexto}>
-                Enviar propuesta · {formatCLP(elegido.precio * cantidad)}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        </KeyboardAvoidingView>
       )}
     </SafeAreaView>
   );
@@ -286,11 +289,13 @@ const styles = StyleSheet.create({
   nombre: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
   precio: { fontSize: 14, fontWeight: '800', color: '#1a1a1a' },
   vacio: { textAlign: 'center', color: '#999', marginTop: 40 },
-  panel: {
+  panelWrap: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  panel: {
     backgroundColor: '#fff',
     padding: 18,
     paddingBottom: 30,

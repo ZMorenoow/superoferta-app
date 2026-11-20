@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -39,6 +39,8 @@ export const generarHorarios = (dia, ahora = new Date()) => {
 const formatHora = (d) =>
   `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
+const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
+
 export default function CarritoScreen() {
   const router = useRouter();
   const [items, setItems] = useState([]);
@@ -46,6 +48,10 @@ export default function CarritoScreen() {
   const [confirmando, setConfirmando] = useState(false);
   const [diaRetiro, setDiaRetiro] = useState(0); // 0 = hoy, 1 = mañana
   const [horaRetiro, setHoraRetiro] = useState(null);
+
+  // Cupón activo del usuario y su descuento calculado en el servidor
+  const [cupon, setCupon] = useState(null);
+  const [descuento, setDescuento] = useState({ monto: 0, motivo: null });
 
   const cargarCarrito = useCallback(async () => {
     setLoading(true);
@@ -120,7 +126,7 @@ export default function CarritoScreen() {
           productoId: ci.id_producto,
           nombre: ci.productos?.nombre ?? 'Producto',
           imagen: ci.productos?.imagen_url,
-          precio: real?.precio ?? ci.precio_unitario, 
+          precio: real?.precio ?? ci.precio_unitario,
           stock: real?.stock ?? 0,
           cantidad: ci.cantidad,
         };
@@ -134,6 +140,53 @@ export default function CarritoScreen() {
       cargarCarrito();
     }, [cargarCarrito])
   );
+
+  // Busca el cupón activo y pide al servidor cuánto descuenta con el carrito actual
+  const calcularCupon = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: filas } = await supabase
+      .from('cupones_usuario')
+      .select('id_cupon, cupones (id, codigo, descripcion, tipo, valor, minimo_compra, id_categoria, categorias (nombre))')
+      .eq('id_usuario', user.id)
+      .is('usado_en', null)
+      .limit(1);
+
+    const activo = filas?.[0]?.cupones;
+    if (!activo) {
+      setCupon(null);
+      setDescuento({ monto: 0, motivo: null });
+      return;
+    }
+
+    const { data, error } = await supabase.rpc('calcular_descuento_cupon', {
+      p_id_cupon: activo.id,
+    });
+
+    setCupon(activo);
+    if (error || !data?.[0]) {
+      console.error('Error calculando cupón', error);
+      setDescuento({ monto: 0, motivo: 'no_disponible' });
+      return;
+    }
+    setDescuento({ monto: data[0].monto_descuento ?? 0, motivo: data[0].motivo ?? null });
+  }, []);
+
+  // Recalcula cada vez que cambia el carrito
+  useEffect(() => {
+    if (!loading) calcularCupon();
+  }, [items, loading, calcularCupon]);
+
+  const quitarCupon = async () => {
+    if (!cupon) return;
+    const { error } = await supabase.rpc('desactivar_cupon', { p_id_cupon: cupon.id });
+    if (error) {
+      Alert.alert('Error', 'No se pudo quitar el cupón');
+      return;
+    }
+    calcularCupon();
+  };
 
   const updateCantidad = async (itemId, delta) => {
     const item = items.find((i) => i.id === itemId);
@@ -201,9 +254,13 @@ export default function CarritoScreen() {
     setConfirmando(true);
 
     try {
+      // Solo se envía el cupón si realmente descuenta algo
+      const args = { p_hora_retiro: horaRetiro.toISOString() };
+      if (cupon && descuento.monto > 0) args.p_id_cupon = cupon.id;
+
       const { data: pedidoId, error: pedidoError } = await supabase.rpc(
         'crear_pedido_desde_carrito',
-        { p_hora_retiro: horaRetiro.toISOString() }
+        args
       );
       if (pedidoError) throw pedidoError;
 
@@ -227,6 +284,7 @@ export default function CarritoScreen() {
         'Producto no disponible',
         'Elige tu sucursal',
         'Hora de retiro',
+        'Cupón',
       ];
       const mostrar = mensajesVisibles.some((m) => e?.message?.startsWith(m));
       Alert.alert(
@@ -240,9 +298,32 @@ export default function CarritoScreen() {
 
   const subtotal = items.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
   const delivery = 0;
-  const total = subtotal + delivery;
+  const total = Math.max(0, subtotal + delivery - descuento.monto);
 
-  const formatCLP = (n) => `$${n.toLocaleString('es-CL')}`;
+  // Texto del cupón y, si no aplica, el motivo
+  const nombreCategoria = cupon?.categorias?.nombre;
+  const etiquetaCupon = cupon
+    ? `${cupon.tipo === 'porcentaje' ? `${cupon.valor}%` : formatCLP(cupon.valor)} dcto.${
+        nombreCategoria ? ` en ${nombreCategoria}` : ''
+      }`
+    : '';
+
+  const motivoTexto = (() => {
+    switch (descuento.motivo) {
+      case 'sin_productos':
+        return nombreCategoria
+          ? `Agrega productos de ${nombreCategoria} para usar tu cupón`
+          : 'Agrega productos para usar tu cupón';
+      case 'minimo':
+        return `Compra mínima de ${formatCLP(cupon?.minimo_compra)}${
+          nombreCategoria ? ` en ${nombreCategoria}` : ''
+        } para usar tu cupón`;
+      case 'no_disponible':
+        return 'Tu cupón ya no está disponible';
+      default:
+        return null;
+    }
+  })();
 
   const Header = ({ mostrarVaciar }) => (
     <View style={styles.header}>
@@ -314,46 +395,73 @@ export default function CarritoScreen() {
         data={items}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 240 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 300 }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListFooterComponent={
-          <View style={styles.retiroBox}>
-            <Text style={styles.retiroTitle}>¿Cuándo retiras tu pedido?</Text>
-
-            <View style={styles.diaRow}>
-              {['Hoy', 'Mañana'].map((label, idx) => (
-                <TouchableOpacity
-                  key={label}
-                  style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
-                  onPress={() => { setDiaRetiro(idx); setHoraRetiro(null); }}
-                >
-                  <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
-                    {label}
+          <View>
+            {/* Cupón activo */}
+            {cupon && (
+              <View style={[styles.cuponBox, descuento.monto === 0 && styles.cuponBoxInactivo]}>
+                <View style={styles.cuponIcon}>
+                  <Ionicons
+                    name="pricetag"
+                    size={18}
+                    color={descuento.monto > 0 ? '#1B6B3A' : '#B45309'}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cuponTitulo}>
+                    {descuento.monto > 0 ? 'Cupón aplicado' : 'Cupón sin aplicar'}
                   </Text>
+                  <Text style={styles.cuponTexto}>{etiquetaCupon}</Text>
+                  {descuento.monto === 0 && !!motivoTexto && (
+                    <Text style={styles.cuponMotivo}>{motivoTexto}</Text>
+                  )}
+                </View>
+                <TouchableOpacity onPress={quitarCupon} hitSlop={10}>
+                  <Text style={styles.cuponQuitar}>Quitar</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            {horarios.length === 0 ? (
-              <Text style={styles.sinHorarios}>Ya no hay horarios hoy. Elige "Mañana".</Text>
-            ) : (
-              <View style={styles.slotsWrap}>
-                {horarios.map((d) => {
-                  const activo = horaRetiro?.getTime() === d.getTime();
-                  return (
-                    <TouchableOpacity
-                      key={d.getTime()}
-                      style={[styles.slot, activo && styles.slotActive]}
-                      onPress={() => setHoraRetiro(d)}
-                    >
-                      <Text style={[styles.slotText, activo && styles.slotTextActive]}>
-                        {formatHora(d)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
               </View>
             )}
+
+            <View style={styles.retiroBox}>
+              <Text style={styles.retiroTitle}>¿Cuándo retiras tu pedido?</Text>
+
+              <View style={styles.diaRow}>
+                {['Hoy', 'Mañana'].map((label, idx) => (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
+                    onPress={() => { setDiaRetiro(idx); setHoraRetiro(null); }}
+                  >
+                    <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {horarios.length === 0 ? (
+                <Text style={styles.sinHorarios}>Ya no hay horarios hoy. Elige "Mañana".</Text>
+              ) : (
+                <View style={styles.slotsWrap}>
+                  {horarios.map((d) => {
+                    const activo = horaRetiro?.getTime() === d.getTime();
+                    return (
+                      <TouchableOpacity
+                        key={d.getTime()}
+                        style={[styles.slot, activo && styles.slotActive]}
+                        onPress={() => setHoraRetiro(d)}
+                      >
+                        <Text style={[styles.slotText, activo && styles.slotTextActive]}>
+                          {formatHora(d)}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
           </View>
         }
       />
@@ -363,6 +471,14 @@ export default function CarritoScreen() {
           <Text style={styles.summaryLabel}>Subtotal</Text>
           <Text style={styles.summaryValue}>{formatCLP(subtotal)}</Text>
         </View>
+        {descuento.monto > 0 && (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Descuento cupón</Text>
+            <Text style={[styles.summaryValue, { color: '#1B6B3A' }]}>
+              -{formatCLP(descuento.monto)}
+            </Text>
+          </View>
+        )}
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Punto Retiro</Text>
           <Text style={[styles.summaryValue, { color: '#1B6B3A' }]}>
@@ -409,6 +525,21 @@ const styles = StyleSheet.create({
   qtyBtn: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fdecea' },
   qtyText: { paddingHorizontal: 12, fontSize: 15, fontWeight: '800', color: '#1a1a1a' },
   separator: { height: 10 },
+
+  cuponBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#e8f5ed', borderRadius: 16, padding: 14, marginTop: 16,
+  },
+  cuponBoxInactivo: { backgroundColor: '#fef3c7' },
+  cuponIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  cuponTitulo: { fontSize: 13, fontWeight: '800', color: '#1a1a1a' },
+  cuponTexto: { fontSize: 12, color: '#555', marginTop: 1 },
+  cuponMotivo: { fontSize: 12, color: '#B45309', fontWeight: '600', marginTop: 3 },
+  cuponQuitar: { fontSize: 13, fontWeight: '700', color: PRIMARY },
+
   retiroBox: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 16 },
   retiroTitle: { fontSize: 15, fontWeight: '800', color: '#1a1a1a', marginBottom: 12 },
   diaRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },

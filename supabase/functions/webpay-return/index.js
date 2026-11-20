@@ -48,6 +48,27 @@ const vaciarCarrito = async (admin, idPedido) => {
   }
 };
 
+const marcarCuponUsado = async (admin, idPedido) => {
+  try {
+    const { data: pedido } = await admin
+      .from('pedidos')
+      .select('id_cliente, id_cupon')
+      .eq('id', idPedido)
+      .maybeSingle();
+    if (!pedido?.id_cupon) return;
+
+    const { error } = await admin
+      .from('cupones_usuario')
+      .update({ usado_en: new Date().toISOString() })
+      .eq('id_usuario', pedido.id_cliente)
+      .eq('id_cupon', pedido.id_cupon)
+      .is('usado_en', null);
+    if (error) console.error('No se pudo marcar el cupón como usado', idPedido, error);
+  } catch (err) {
+    console.error('Error marcando el cupón', idPedido, err);
+  }
+};
+
 Deno.serve(async (req) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
   const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -155,6 +176,7 @@ Deno.serve(async (req) => {
 
 
       await vaciarCarrito(admin, pago.id_pedido);
+      await marcarCuponUsado(admin, pago.id_pedido);
     } else {
       await liberarPedido(admin, pago.id_pedido);
     }

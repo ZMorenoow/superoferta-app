@@ -176,7 +176,7 @@ export default function ProductDetail() {
 
       const { data, error } = await supabase
         .from('producto_sucursal')
-        .select('precio, stock, productos!inner (id, nombre, descripcion, imagen_url, id_categoria)')
+        .select('precio, stock, productos!inner (id, nombre, descripcion, imagen_url, id_categoria, codigo_barra)')
         .eq('id_producto', id)
         .eq('id_sucursal', idSucursal)
         .single();
@@ -185,6 +185,7 @@ export default function ProductDetail() {
         setProduct({
           id: data.productos.id,
           name: data.productos.nombre,
+          barcode: data.productos.codigo_barra,
           description: data.productos.descripcion,
           price: Math.round(data.precio ?? 0),
           original_price: null,
@@ -353,6 +354,13 @@ export default function ProductDetail() {
           <Text style={styles.productName}>{product.name}</Text>
           {!!product.unit && <Text style={styles.productUnit}>{product.unit}</Text>}
 
+          {!!product.barcode && (
+            <View style={styles.barcodeChip}>
+              <Ionicons name="barcode-outline" size={18} color="#555" />
+              <Text style={styles.barcodeLabel}>Cód. barras</Text>
+              <Text style={styles.barcodeValue} selectable>{product.barcode}</Text>
+            </View>
+          )}
           <View style={styles.priceRow}>
             <Text style={styles.price}>{formatCLP(product.price)}</Text>
             {hasDiscount && (
@@ -512,6 +520,15 @@ const styles = StyleSheet.create({
   infoContainer: { padding: 20 },
   productName: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', marginBottom: 4 },
   productUnit: { fontSize: 13, color: '#888', marginBottom: 12 },
+  barcodeChip: {
+  flexDirection: 'row', alignItems: 'center', gap: 8,
+  alignSelf: 'flex-start',
+  backgroundColor: '#fff', borderWidth: 1, borderColor: '#eee',
+  borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8,
+  marginTop: 8, marginBottom: 14,
+},
+barcodeLabel: { fontSize: 12, fontWeight: '600', color: '#888' },
+barcodeValue: { fontSize: 13, fontWeight: '800', color: '#1a1a1a', letterSpacing: 1 },
   priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 14 },
   price: { fontSize: 30, fontWeight: '900', color: PRIMARY },
   originalPrice: { fontSize: 16, color: '#aaa', textDecorationLine: 'line-through' },

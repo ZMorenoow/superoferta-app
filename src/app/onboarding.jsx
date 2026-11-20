@@ -31,7 +31,7 @@ const SLIDES = [
     id: '3',
     emoji: '📦',
     title: 'Retiro súper fácil',
-    subtitle: 'Llega al supermercado, muestra tu código de 4 digitos y llévate todo. Sin filas, sin espera.',
+    subtitle: 'Llega al supermercado, muestra tu código de 6 digitos y llévate todo. Sin filas, sin espera.',
     bg: '#C21807',
   },
 ];
