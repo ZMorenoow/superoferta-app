@@ -7,6 +7,7 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -118,46 +119,49 @@ export default function LoginScreen() {
         statusBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
-          <Pressable style={{ flex: 1 }} onPress={() => setModalVisible(false)} />
+        <View style={styles.modalOverlay}>
+          {/* Fondo: tocar afuera cierra el modal (no ocupa espacio) */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
 
-          <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
-            <View style={styles.handle} />
-            <Text style={styles.modalTitle}>Iniciar sesión</Text>
-            <Text style={styles.modalSubtitle}>Ingresa tus credenciales</Text>
+          <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+            <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+              <View style={styles.handle} />
+              <Text style={styles.modalTitle}>Iniciar sesión</Text>
+              <Text style={styles.modalSubtitle}>Ingresa tus credenciales</Text>
 
-            <CampoTexto
-              icono="mail-outline"
-              placeholder="Correo electrónico"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={email}
-              onChangeText={setEmail}
-            />
-            <CampoTexto
-              icono="lock-closed-outline"
-              placeholder="Contraseña"
-              secure
-              value={password}
-              onChangeText={setPassword}
-              returnKeyType="go"
-              onSubmitEditing={handleLogin}
-            />
+              <CampoTexto
+                icono="mail-outline"
+                placeholder="Correo electrónico"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={email}
+                onChangeText={setEmail}
+              />
+              <CampoTexto
+                icono="lock-closed-outline"
+                placeholder="Contraseña"
+                secure
+                value={password}
+                onChangeText={setPassword}
+                returnKeyType="go"
+                onSubmitEditing={handleLogin}
+              />
 
-            <TouchableOpacity
-              style={[styles.btnPrimary, { marginTop: 8 }]}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Entrar</Text>}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnPrimary, { marginTop: 8 }]}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Entrar</Text>}
+              </TouchableOpacity>
 
-            <TouchableOpacity style={styles.btnSecondary} onPress={() => setModalVisible(false)}>
-              <Text style={styles.btnSecondaryText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+              <TouchableOpacity style={styles.btnSecondary} onPress={() => setModalVisible(false)}>
+                <Text style={styles.btnSecondaryText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </ImageBackground>
   );

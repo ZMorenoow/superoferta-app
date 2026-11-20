@@ -12,11 +12,13 @@ import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
 
+const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
+
 function Section({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <View style={secStyles.container}>
-      <TouchableOpacity style={secStyles.header} onPress={() => setOpen(!open)}>
+      <TouchableOpacity style={secStyles.header} onPress={() => setOpen(!open)} activeOpacity={0.7}>
         <Text style={secStyles.title}>{title}</Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color="#555" />
       </TouchableOpacity>
@@ -27,21 +29,56 @@ function Section({ title, children, defaultOpen = false }) {
 
 const secStyles = StyleSheet.create({
   container: {
-    borderWidth: 1, borderColor: '#ebebeb',
-    borderRadius: 14, marginBottom: 12, overflow: 'hidden',
+    backgroundColor: '#fff',
+    borderRadius: 16, marginBottom: 12, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', padding: 16,
   },
-  title: { fontSize: 15, fontWeight: '700', color: '#1a1a1a' },
+  title: { fontSize: 15, fontWeight: '800', color: '#1a1a1a' },
   body: { paddingHorizontal: 16, paddingBottom: 16 },
+});
+
+// Tarjeta del carrusel de productos similares
+function TarjetaSimilar({ item, onPress }) {
+  return (
+    <TouchableOpacity style={simStyles.card} onPress={() => onPress(item)} activeOpacity={0.85}>
+      <View style={simStyles.imgWrap}>
+        <Image
+          source={item.image_url ? { uri: item.image_url } : require('../../assets/images/logo.png')}
+          style={simStyles.img}
+          resizeMode="cover"
+        />
+      </View>
+      <View style={simStyles.info}>
+        <Text style={simStyles.name} numberOfLines={2}>{item.name}</Text>
+        <Text style={simStyles.price}>{formatCLP(item.price)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const simStyles = StyleSheet.create({
+  card: {
+    width: 150, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
+  },
+  imgWrap: { width: '100%', height: 110, backgroundColor: '#f4f4f4' },
+  img: { width: '100%', height: '100%' },
+  info: { padding: 12 },
+  name: { fontSize: 12, fontWeight: '600', color: '#1a1a1a', lineHeight: 16, minHeight: 32 },
+  price: { fontSize: 15, fontWeight: '800', color: '#1a1a1a', marginTop: 6 },
 });
 
 export default function ProductDetail() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const [product, setProduct] = useState(null);
+  const [similares, setSimilares] = useState([]);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
   const [agregando, setAgregando] = useState(false);
@@ -82,9 +119,41 @@ export default function ProductDetail() {
     }, [cargarCartCount])
   );
 
+  // Productos de la misma sucursal, excluyendo el actual.
+  // Si se pasa categoría, filtra por ella.
+  const traerDeSucursal = async (idSucursal, idProductoActual, idCategoria) => {
+    let query = supabase
+      .from('producto_sucursal')
+      .select('precio, stock, productos!inner (id, nombre, imagen_url, id_categoria, activo)')
+      .eq('id_sucursal', idSucursal)
+      .eq('activo', true)
+      .eq('productos.activo', true)
+      .neq('id_producto', idProductoActual)
+      .limit(10);
+
+    if (idCategoria) {
+      query = query.eq('productos.id_categoria', idCategoria);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('Error cargando productos similares', error);
+      return [];
+    }
+
+    return (data || []).map((ps) => ({
+      id: ps.productos.id,
+      name: ps.productos.nombre,
+      price: Math.round(ps.precio ?? 0),
+      image_url: ps.productos.imagen_url,
+    }));
+  };
+
   useEffect(() => {
     const cargarProducto = async () => {
       setLoading(true);
+      setQty(1);
+      setSimilares([]);
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
@@ -103,11 +172,13 @@ export default function ProductDetail() {
         return;
       }
 
+      const idSucursal = perfil.id_sucursal_preferida;
+
       const { data, error } = await supabase
         .from('producto_sucursal')
-        .select('precio, stock, productos!inner (id, nombre, descripcion, imagen_url)')
+        .select('precio, stock, productos!inner (id, nombre, descripcion, imagen_url, id_categoria)')
         .eq('id_producto', id)
-        .eq('id_sucursal', perfil.id_sucursal_preferida)
+        .eq('id_sucursal', idSucursal)
         .single();
 
       if (!error && data) {
@@ -123,12 +194,28 @@ export default function ProductDetail() {
           tags: [],
           characteristics: [],
         });
+        setLoading(false);
+
+        // Similares: misma categoría; si no hay, otros de la sucursal
+        const idCategoria = data.productos.id_categoria;
+        let lista = idCategoria
+          ? await traerDeSucursal(idSucursal, data.productos.id, idCategoria)
+          : [];
+        if (lista.length === 0) {
+          lista = await traerDeSucursal(idSucursal, data.productos.id, null);
+        }
+        setSimilares(lista);
+        return;
       }
       setLoading(false);
     };
 
     if (id) cargarProducto();
   }, [id]);
+
+  const abrirProducto = useCallback((item) => {
+    router.push({ pathname: '/product-detail', params: { id: item.id } });
+  }, [router]);
 
   const handleAgregarAlCarrito = async () => {
     setAgregando(true);
@@ -234,12 +321,12 @@ export default function ProductDetail() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={24} color="#1a1a1a" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.circleBtn}>
+          <Ionicons name="chevron-back" size={22} color="#1a1a1a" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{product.name}</Text>
-        <TouchableOpacity style={styles.cartBtn} onPress={() => router.push('/cart')}>
-          <Ionicons name="cart-outline" size={24} color={PRIMARY} />
+        <TouchableOpacity style={styles.circleBtn} onPress={() => router.push('/cart')}>
+          <Ionicons name="cart-outline" size={22} color={PRIMARY} />
           {cartCount > 0 && (
             <View style={styles.cartBadge}>
               <Text style={styles.cartBadgeText}>{cartCount}</Text>
@@ -248,7 +335,7 @@ export default function ProductDetail() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 160 }}>
         <View style={styles.imageContainer}>
           {hasDiscount && (
             <View style={styles.discountBadge}>
@@ -267,9 +354,9 @@ export default function ProductDetail() {
           {!!product.unit && <Text style={styles.productUnit}>{product.unit}</Text>}
 
           <View style={styles.priceRow}>
-            <Text style={styles.price}>${product.price.toLocaleString('es-CL')}</Text>
+            <Text style={styles.price}>{formatCLP(product.price)}</Text>
             {hasDiscount && (
-              <Text style={styles.originalPrice}>${product.original_price.toLocaleString('es-CL')}</Text>
+              <Text style={styles.originalPrice}>{formatCLP(product.original_price)}</Text>
             )}
           </View>
 
@@ -330,12 +417,28 @@ export default function ProductDetail() {
             )}
           </View>
         </View>
+
+        {/* Productos similares */}
+        {similares.length > 0 && (
+          <View style={styles.similaresBloque}>
+            <Text style={styles.similaresTitulo}>Productos similares</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.similaresLista}
+            >
+              {similares.map((p) => (
+                <TarjetaSimilar key={p.id} item={p} onPress={abrirProducto} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: 12 + insets.bottom }]}>
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>${(product.price * qty).toLocaleString('es-CL')}</Text>
+          <Text style={styles.totalValue}>{formatCLP(product.price * qty)}</Text>
         </View>
         <TouchableOpacity
           style={[styles.addBtn, (product.stock === 0 || agregando) && styles.addBtnDisabled]}
@@ -369,42 +472,53 @@ export default function ProductDetail() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: '#F8F9FA' },
+
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#F8F9FA',
   },
-  backBtn: { padding: 4, marginRight: 8 },
-  headerTitle: { flex: 1, fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
-  cartBtn: { position: 'relative', padding: 4 },
+  circleBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08, shadowRadius: 6, elevation: 3,
+  },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
   cartBadge: {
-    position: 'absolute', top: 0, right: 0,
-    backgroundColor: PRIMARY, width: 16, height: 16,
-    borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: -2, right: -2,
+    backgroundColor: PRIMARY, width: 18, height: 18,
+    borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: '#F8F9FA',
   },
   cartBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+
   imageContainer: {
-    backgroundColor: '#f8f8f8', alignItems: 'center',
-    justifyContent: 'center', paddingVertical: 30, position: 'relative',
+    backgroundColor: '#fff', alignItems: 'center',
+    justifyContent: 'center', paddingVertical: 24, marginHorizontal: 16,
+    borderRadius: 24, position: 'relative',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.07, shadowRadius: 12, elevation: 3,
   },
   discountBadge: {
-    position: 'absolute', top: 16, left: 16,
+    position: 'absolute', top: 14, left: 14, zIndex: 1,
     backgroundColor: PRIMARY, paddingHorizontal: 10,
     paddingVertical: 4, borderRadius: 10,
   },
   discountText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  productImage: { width: '80%', height: 220 },
+  productImage: { width: '85%', height: 250 },
+
   infoContainer: { padding: 20 },
-  productName: { fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginBottom: 4 },
+  productName: { fontSize: 24, fontWeight: '800', color: '#1a1a1a', marginBottom: 4 },
   productUnit: { fontSize: 13, color: '#888', marginBottom: 12 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 12 },
-  price: { fontSize: 28, fontWeight: '800', color: '#1a1a1a' },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginBottom: 14 },
+  price: { fontSize: 30, fontWeight: '900', color: PRIMARY },
   originalPrice: { fontSize: 16, color: '#aaa', textDecorationLine: 'line-through' },
   tagsRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   tag: {
-    backgroundColor: '#f0f0f0', paddingHorizontal: 12,
-    paddingVertical: 6, borderRadius: 20,
+    backgroundColor: '#fff', paddingHorizontal: 12,
+    paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: '#eee',
   },
   tagText: { fontSize: 12, fontWeight: '600', color: '#555' },
   stockBadge: {
@@ -415,34 +529,46 @@ const styles = StyleSheet.create({
   stockBadgeOut: { backgroundColor: '#fdecea' },
   stockText: { fontSize: 13, fontWeight: '600', color: '#1B6B3A' },
   stockTextOut: { color: PRIMARY },
+
   qtyRow: {
     flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', marginBottom: 20,
-    backgroundColor: '#f8f8f8', borderRadius: 14, padding: 14,
+    backgroundColor: '#fff', borderRadius: 16, padding: 14,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
-  qtyLabel: { fontSize: 15, fontWeight: '600', color: '#333' },
+  qtyLabel: { fontSize: 15, fontWeight: '700', color: '#333' },
   qtySelector: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   qtyBtn: {
     width: 36, height: 36, borderRadius: 10,
-    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08, shadowRadius: 4, elevation: 2,
+    backgroundColor: '#fdecea', alignItems: 'center', justifyContent: 'center',
   },
   qtyValue: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', minWidth: 24, textAlign: 'center' },
+
   charRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
   charRowAlt: { backgroundColor: '#f8f8f8', marginHorizontal: -16, paddingHorizontal: 16 },
   charLabel: { fontSize: 13, fontWeight: '700', color: '#333', flex: 1 },
   charValue: { fontSize: 13, color: '#555', flex: 1, textAlign: 'right' },
   descriptionText: { fontSize: 14, color: '#555', lineHeight: 22 },
+
+  similaresBloque: { marginTop: 4 },
+  similaresTitulo: {
+    fontSize: 17, fontWeight: '800', color: '#1a1a1a',
+    paddingHorizontal: 20, marginBottom: 12,
+  },
+  similaresLista: { paddingHorizontal: 20, paddingBottom: 8, gap: 12 },
+
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#fff', paddingHorizontal: 20,
-    paddingTop: 12,
-    borderTopWidth: 1, borderTopColor: '#f0f0f0',
+    paddingTop: 14,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08, shadowRadius: 12, elevation: 12,
   },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   totalLabel: { fontSize: 14, color: '#888' },
-  totalValue: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
+  totalValue: { fontSize: 20, fontWeight: '900', color: '#1a1a1a' },
   addBtn: {
     backgroundColor: PRIMARY, borderRadius: 16,
     paddingVertical: 16, flexDirection: 'row',

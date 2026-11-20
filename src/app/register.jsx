@@ -36,7 +36,6 @@ export default function RegisterScreen() {
   const [direccion, setDireccion] = useState('');
   const [referencia, setReferencia] = useState('');
   const [ciudad, setCiudad] = useState('');
-  const [codigoPostal, setCodigoPostal] = useState('');
 
   const [loading, setLoading] = useState(false);
 
@@ -87,7 +86,6 @@ export default function RegisterScreen() {
             direccion: direccion.trim(),
             referencia: referencia.trim(),
             ciudad: ciudad.trim(),
-            codigo_postal: codigoPostal.trim(),
           },
         },
       });
@@ -209,12 +207,8 @@ export default function RegisterScreen() {
               value={direccion} onChangeText={setDireccion} />
             <CampoTexto icono="information-circle-outline" placeholder="Referencia (Ej: Depto 402)"
               value={referencia} onChangeText={setReferencia} />
-            <View style={styles.row}>
-              <CampoTexto style={{ flex: 1 }} icono="business-outline" placeholder="Ciudad"
-                value={ciudad} onChangeText={setCiudad} />
-              <CampoTexto style={{ flex: 1 }} placeholder="Cód. postal"
-                keyboardType="numeric" value={codigoPostal} onChangeText={setCodigoPostal} />
-            </View>
+            <CampoTexto icono="business-outline" placeholder="Ciudad"
+              value={ciudad} onChangeText={setCiudad} />
           </View>
 
           <TouchableOpacity style={styles.btnPrimary} onPress={handleRegister} disabled={loading}>

@@ -1,14 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTabBar } from '../../context/TabBarContext';
 import { supabase } from '../../utils/supabase';
 
 const PRIMARY = '#C21807';
 
 const MENU_ITEMS = [
+  { icon: 'person-outline', label: 'Datos personales', route: '/datos-personales' },
+  { icon: 'lock-closed-outline', label: 'Cambiar contraseña', route: '/cambiar-password' },
   { icon: 'receipt-outline', label: 'Mis pedidos', route: '/mis_pedidos' },
   { icon: 'location-outline', label: 'Mis direcciones', route: '/mis-direcciones' },
   { icon: 'notifications-outline', label: 'Notificaciones', route: '/notificaciones' },
@@ -17,14 +27,13 @@ const MENU_ITEMS = [
 
 export default function PerfilScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { handleScroll } = useTabBar();
   const [perfil, setPerfil] = useState(null);
-  const [email, setEmail] = useState('');
   const [sucursal, setSucursal] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const cargarPerfil = useCallback(async () => {
-    setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -32,11 +41,9 @@ export default function PerfilScreen() {
       return;
     }
 
-    setEmail(user.email);
-
     const { data, error } = await supabase
       .from('perfiles')
-      .select('nombre, apellido, sucursales(nombre)')
+      .select('nombre, apellido, avatar_url, sucursales(nombre)')
       .eq('id', user.id)
       .single();
 
@@ -58,30 +65,44 @@ export default function PerfilScreen() {
     router.replace('/login');
   };
 
-  const nombreCompleto = perfil ? `${perfil.nombre} ${perfil.apellido}` : 'Mi cuenta';
+  const nombreCompleto = perfil
+    ? `${perfil.nombre ?? ''} ${perfil.apellido ?? ''}`.trim() || 'Mi cuenta'
+    : 'Mi cuenta';
+
+  const iniciales = perfil
+    ? `${perfil.nombre?.[0] ?? ''}${perfil.apellido?.[0] ?? ''}`.toUpperCase()
+    : '';
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 80 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Mi Perfil</Text>
+        {/* Cabecera roja */}
+        <View style={[styles.hero, { paddingTop: insets.top + 12 }]}>
+          <Text style={styles.heroTitle}>Mi perfil</Text>
         </View>
 
-        <View style={styles.avatarSection}>
+        {/* Avatar + nombre */}
+        <View style={styles.profileBlock}>
           <View style={styles.avatar}>
-            <Ionicons name="person" size={40} color="#fff" />
+            {perfil?.avatar_url ? (
+              <Image source={{ uri: perfil.avatar_url }} style={styles.avatarImg} />
+            ) : iniciales ? (
+              <Text style={styles.avatarIniciales}>{iniciales}</Text>
+            ) : (
+              <Ionicons name="person" size={42} color="#fff" />
+            )}
           </View>
+
           {loading ? (
-            <ActivityIndicator color={PRIMARY} style={{ marginTop: 8 }} />
+            <ActivityIndicator color={PRIMARY} style={{ marginTop: 12 }} />
           ) : (
             <>
               <Text style={styles.userName}>{nombreCompleto}</Text>
-              <Text style={styles.userEmail}>{email}</Text>
               {sucursal && (
                 <View style={styles.sucursalBadge}>
                   <Ionicons name="storefront-outline" size={14} color={PRIMARY} />
@@ -92,12 +113,15 @@ export default function PerfilScreen() {
           )}
         </View>
 
+        {/* Menú */}
+        <Text style={styles.sectionLabel}>Mi cuenta</Text>
         <View style={styles.menuCard}>
           {MENU_ITEMS.map((item, i) => (
             <TouchableOpacity
-              key={i}
+              key={item.route}
               style={[styles.menuItem, i < MENU_ITEMS.length - 1 && styles.menuItemBorder]}
               onPress={() => router.push(item.route)}
+              activeOpacity={0.7}
             >
               <View style={styles.menuLeft}>
                 <View style={styles.menuIconBox}>
@@ -110,55 +134,71 @@ export default function PerfilScreen() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
           <Ionicons name="log-out-outline" size={20} color={PRIMARY} />
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 8 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1a1a1a' },
-  avatarSection: { alignItems: 'center', paddingVertical: 24 },
-  avatar: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: PRIMARY, alignItems: 'center', justifyContent: 'center',
-    marginBottom: 12,
-    shadowColor: PRIMARY, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 6,
+
+  hero: {
+    backgroundColor: PRIMARY,
+    height: 170,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
-  userName: { fontSize: 20, fontWeight: '800', color: '#1a1a1a' },
-  userEmail: { fontSize: 13, color: '#888', marginTop: 2 },
+  heroTitle: { fontSize: 24, fontWeight: '800', color: '#fff' },
+
+  profileBlock: { alignItems: 'center', marginTop: -56, paddingBottom: 8 },
+  avatar: {
+    width: 112, height: 112, borderRadius: 56,
+    backgroundColor: '#8f1005', alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden', borderWidth: 4, borderColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 10, elevation: 6,
+  },
+  avatarImg: { width: '100%', height: '100%' },
+  avatarIniciales: { fontSize: 38, fontWeight: '900', color: '#fff' },
+  userName: { fontSize: 21, fontWeight: '800', color: '#1a1a1a', marginTop: 12 },
   sucursalBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#fdecea', paddingHorizontal: 12, paddingVertical: 6,
-    borderRadius: 20, marginTop: 10,
+    borderRadius: 20, marginTop: 8,
   },
   sucursalText: { fontSize: 12, fontWeight: '700', color: PRIMARY },
+
+  sectionLabel: {
+    fontSize: 13, fontWeight: '700', color: '#999',
+    marginHorizontal: 20, marginTop: 20, marginBottom: 8,
+    textTransform: 'uppercase', letterSpacing: 0.5,
+  },
   menuCard: {
     backgroundColor: '#fff', marginHorizontal: 16,
-    borderRadius: 16, overflow: 'hidden',
+    borderRadius: 18, overflow: 'hidden',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 16,
+    justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 15,
   },
   menuItemBorder: { borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
   menuLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   menuIconBox: {
-    width: 36, height: 36, borderRadius: 10,
+    width: 38, height: 38, borderRadius: 11,
     backgroundColor: '#fdecea', alignItems: 'center', justifyContent: 'center',
   },
   menuLabel: { fontSize: 15, fontWeight: '600', color: '#1a1a1a' },
+
   logoutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 8, marginHorizontal: 16, marginTop: 16,
+    gap: 8, marginHorizontal: 16, marginTop: 20,
     backgroundColor: '#fff', borderRadius: 16, paddingVertical: 16,
     borderWidth: 1.5, borderColor: '#fdecea',
   },

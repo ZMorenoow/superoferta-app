@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Pressable,
+  ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable,
   StyleSheet, Text, TouchableOpacity, View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -116,28 +116,31 @@ export default function MisDireccionesScreen() {
         statusBarTranslucent
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
-          <Pressable style={{ flex: 1 }} onPress={() => setModalVisible(false)} />
+        <View style={styles.modalOverlay}>
+          {/* Fondo: tocar afuera cierra el modal (no ocupa espacio) */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
 
-          <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
-            <View style={styles.handle} />
-            <Text style={styles.modalTitle}>Nueva dirección</Text>
+          <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+            <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
+              <View style={styles.handle} />
+              <Text style={styles.modalTitle}>Nueva dirección</Text>
 
-            <CampoTexto icono="bookmark-outline" placeholder="Nombre (ej: Casa, Trabajo)"
-              value={nombre} onChangeText={setNombre} />
-            <CampoTexto icono="location-outline" placeholder="Dirección completa"
-              value={direccion} onChangeText={setDireccion} />
-            <CampoTexto icono="information-circle-outline" placeholder="Referencia (opcional)"
-              value={referencia} onChangeText={setReferencia} />
+              <CampoTexto icono="bookmark-outline" placeholder="Nombre (ej: Casa, Trabajo)"
+                value={nombre} onChangeText={setNombre} />
+              <CampoTexto icono="location-outline" placeholder="Dirección completa"
+                value={direccion} onChangeText={setDireccion} />
+              <CampoTexto icono="information-circle-outline" placeholder="Referencia (opcional)"
+                value={referencia} onChangeText={setReferencia} />
 
-            <TouchableOpacity style={styles.btnGuardar} onPress={guardarDireccion} disabled={guardando}>
-              {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnGuardarText}>Guardar</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.btnCancelar} onPress={() => setModalVisible(false)}>
-              <Text style={styles.btnCancelarText}>Cancelar</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
+              <TouchableOpacity style={styles.btnGuardar} onPress={guardarDireccion} disabled={guardando}>
+                {guardando ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnGuardarText}>Guardar</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnCancelar} onPress={() => setModalVisible(false)}>
+                <Text style={styles.btnCancelarText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
       </Modal>
     </SafeAreaView>
   );
