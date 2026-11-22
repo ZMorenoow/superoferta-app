@@ -8,6 +8,12 @@ async function enviarPush(admin, userId, { title, body, data }) {
     return;
   }
 
+  // Guardar el aviso en la lista dentro de la app (alimenta el contador de "Notificaciones")
+  const { error: errNotif } = await admin
+    .from('notificaciones')
+    .insert({ id_usuario: userId, titulo: title, mensaje: body, leida: false });
+  if (errNotif) console.error('[push] error guardando en notificaciones:', errNotif.message);
+
   const { data: perfil, error } = await admin
     .from('perfiles').select('push_token').eq('id', userId).maybeSingle();
   if (error) console.error('[push] error leyendo el token:', error.message);
@@ -41,13 +47,15 @@ async function enviarPush(admin, userId, { title, body, data }) {
 async function pickerDelPedido(admin, idPedido, idPickerEnPedido) {
   if (idPickerEnPedido) return idPickerEnPedido;
 
-  const { data } = await admin
+  const { data, error } = await admin
     .from('pedido_picker')
     .select('id_picker')
     .eq('id_pedido', idPedido)
     .order('fecha_asignacion', { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (error) console.error('[push] error leyendo pedido_picker:', error.message);
 
   return data?.id_picker ?? null;
 }
@@ -68,11 +76,12 @@ Deno.serve(async (req) => {
 
     // ---- Sustituciones ----------------------------------------------------
     if (table === 'sustituciones') {
-      const { data: item } = await admin
+      const { data: item, error: errItem } = await admin
         .from('pedido_items')
         .select('id_pedido, productos(nombre), pedidos(id_cliente, id_picker)')
         .eq('id', record.id_item)
         .maybeSingle();
+      if (errItem) console.error('[push] error leyendo pedido_items:', errItem.message);
       if (!item) return new Response('ok');
 
       const nombre = item.productos?.nombre ?? 'un producto';
@@ -108,6 +117,15 @@ Deno.serve(async (req) => {
           title: '¡Tu pedido está listo!',
           body: `Retíralo en la sucursal. Tu código de retiro es ${record.codigo_retiro}.`,
           data: { ruta: '/(tabs)' },
+        });
+      }
+
+      // Pedido entregado (el admin confirmó el retiro) -> cliente
+      if (!antes?.entregado_en && record.entregado_en) {
+        await enviarPush(admin, record.id_cliente, {
+          title: '¡Pedido entregado!',
+          body: 'Se ha entregado de manera exitosa tu pedido. ¡Que lo disfrutes!',
+          data: { ruta: '/mis_pedidos' },
         });
       }
 
