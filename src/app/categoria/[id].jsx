@@ -12,6 +12,8 @@ import { agregarAlCarrito } from '../../utils/agregarAlCarrito';
 import { supabase } from '../../utils/supabase';
 
 const PRIMARY = '#C21807';
+const BG = '#F5F5F7';
+const INK = '#1a1a1a';
 
 export default function CategoriaScreen() {
   const { id } = useLocalSearchParams();
@@ -92,15 +94,24 @@ export default function CategoriaScreen() {
     Alert.alert('¡Listo!', 'Se ha agregado correctamente el producto al carrito');
   };
 
+  const mostrandoLista = !(loading || loadingSucursal);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#1a1a1a" />
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.8}>
+          <Ionicons name="chevron-back" size={22} color={INK} />
         </TouchableOpacity>
-        <Text style={styles.title}>
-          {category?.emoji} {category?.nombre}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title} numberOfLines={1}>
+            {category?.emoji} {category?.nombre}
+          </Text>
+          {mostrandoLista && products.length > 0 && (
+            <Text style={styles.subtitle}>
+              {products.length} {products.length === 1 ? 'producto' : 'productos'}
+            </Text>
+          )}
+        </View>
       </View>
 
       {subs.length > 0 && (
@@ -117,6 +128,7 @@ export default function CategoriaScreen() {
                   key={s.id ?? 'todo'}
                   onPress={() => setSub(s.id)}
                   style={[styles.chip, active && styles.chipActive]}
+                  activeOpacity={0.8}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>
                     {s.nombre}
@@ -128,8 +140,8 @@ export default function CategoriaScreen() {
         </View>
       )}
 
-      {loading || loadingSucursal ? (
-        <ActivityIndicator color={PRIMARY} style={{ marginTop: 40 }} />
+      {!mostrandoLista ? (
+        <ActivityIndicator color={PRIMARY} size="large" style={{ marginTop: 40 }} />
       ) : (
         <FlatList
           data={products}
@@ -137,43 +149,60 @@ export default function CategoriaScreen() {
           numColumns={2}
           columnWrapperStyle={{ gap: 12 }}
           contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <Text style={styles.empty}>
-              {idSucursal
-                ? 'Aún no hay productos aquí 🛒'
-                : 'Elige una sucursal en tu perfil para ver los precios'}
-            </Text>
+            <View style={styles.emptyBox}>
+              <Ionicons name="basket-outline" size={64} color="#d8d8d8" />
+              <Text style={styles.empty}>
+                {idSucursal
+                  ? 'Aún no hay productos aquí'
+                  : 'Elige una sucursal en tu perfil para ver los precios'}
+              </Text>
+            </View>
           }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              activeOpacity={0.85}
-              onPress={() =>
-                router.push({ pathname: '/product-detail', params: { id: item.id } })
-              }
-            >
-              <Image
-                source={{ uri: item.imagen_url }}
-                style={styles.image}
-                contentFit="cover"
-                transition={200}
-                cachePolicy="memory-disk"
-              />
-              <View style={styles.cardBody}>
-                <Text style={styles.name} numberOfLines={2}>{item.nombre}</Text>
-                <View style={styles.row}>
-                  <Text style={styles.price}>${item.precio.toLocaleString('es-CL')}</Text>
-                  <TouchableOpacity
-                    style={[styles.addBtn, item.stock === 0 && { backgroundColor: '#ccc' }]}
-                    disabled={item.stock === 0}
-                    onPress={() => handleAdd(item)}
-                  >
-                    <Ionicons name="add" size={18} color="#fff" />
-                  </TouchableOpacity>
+          renderItem={({ item }) => {
+            const sinStock = item.stock === 0;
+            return (
+              <TouchableOpacity
+                style={styles.card}
+                activeOpacity={0.9}
+                onPress={() =>
+                  router.push({ pathname: '/product-detail', params: { id: item.id } })
+                }
+              >
+                <View style={styles.imageWrap}>
+                  <Image
+                    source={{ uri: item.imagen_url }}
+                    style={[styles.image, sinStock && { opacity: 0.45 }]}
+                    contentFit="cover"
+                    transition={200}
+                    cachePolicy="memory-disk"
+                  />
+
+                  {sinStock ? (
+                    <View style={styles.stockBadge}>
+                      <Text style={styles.stockBadgeText}>Sin stock</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.addBtn}
+                      onPress={() => handleAdd(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add" size={22} color="#fff" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-              </View>
-            </TouchableOpacity>
-          )}
+
+                <View style={styles.cardBody}>
+                  <Text style={styles.name} numberOfLines={2}>{item.nombre}</Text>
+                  <Text style={[styles.price, sinStock && { color: '#aaa' }]}>
+                    ${item.precio.toLocaleString('es-CL')}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -181,32 +210,52 @@ export default function CategoriaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12 },
-  backBtn: { padding: 6, marginRight: 6 },
-  title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a' },
-  chips: { paddingHorizontal: 16, paddingBottom: 12, gap: 8 },
+  container: { flex: 1, backgroundColor: BG },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingTop: 4, paddingBottom: 14,
+  },
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 3px 10px rgba(0,0,0,0.08)',
+  },
+  title: { fontSize: 24, fontWeight: '800', color: INK, letterSpacing: -0.4 },
+  subtitle: { fontSize: 12, color: '#9a9a9a', fontWeight: '600', marginTop: 1 },
+
+  chips: { paddingHorizontal: 16, paddingBottom: 14, gap: 8 },
   chip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
-    backgroundColor: '#fff', borderWidth: 1, borderColor: '#eee',
+    paddingHorizontal: 16, paddingVertical: 9, borderRadius: 22,
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#ececec',
   },
-  chipActive: { borderColor: PRIMARY, backgroundColor: '#fff0ee' },
-  chipText: { fontSize: 13, color: '#555', fontWeight: '600' },
-  chipTextActive: { color: PRIMARY },
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
-  empty: { textAlign: 'center', color: '#999', marginTop: 40 },
+  chipActive: { borderColor: PRIMARY, backgroundColor: PRIMARY },
+  chipText: { fontSize: 13, color: '#555', fontWeight: '700' },
+  chipTextActive: { color: '#fff' },
+
+  list: { paddingHorizontal: 16, paddingBottom: 120 },
+  emptyBox: { alignItems: 'center', marginTop: 60, gap: 10 },
+  empty: { textAlign: 'center', color: '#aaa', fontSize: 15, paddingHorizontal: 30 },
+
   card: {
-    flex: 1, backgroundColor: '#fff', borderRadius: 16, marginBottom: 12, overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
+    flex: 1, backgroundColor: '#fff', borderRadius: 20, marginBottom: 12, overflow: 'hidden',
+    boxShadow: '0px 3px 12px rgba(0,0,0,0.06)',
   },
-  image: { width: '100%', height: 120 },
-  cardBody: { padding: 10 },
-  name: { fontSize: 13, fontWeight: '600', color: '#1a1a1a', minHeight: 34 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
-  price: { fontSize: 16, fontWeight: '800', color: '#1a1a1a' },
+  imageWrap: { width: '100%', height: 140, backgroundColor: '#fff' },
+  image: { width: '100%', height: '100%' },
+  stockBadge: {
+    position: 'absolute', top: 10, left: 10,
+    backgroundColor: 'rgba(26,26,26,0.75)', paddingHorizontal: 9,
+    paddingVertical: 4, borderRadius: 20,
+  },
+  stockBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
   addBtn: {
-    backgroundColor: PRIMARY, width: 30, height: 30,
-    borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', right: 10, bottom: 10,
+    backgroundColor: PRIMARY, width: 36, height: 36,
+    borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 3px 8px rgba(194,24,7,0.35)',
   },
+  cardBody: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 14 },
+  name: { fontSize: 13, fontWeight: '600', color: INK, lineHeight: 18, minHeight: 36 },
+  price: { fontSize: 17, fontWeight: '800', color: INK, marginTop: 6, letterSpacing: -0.3 },
 });

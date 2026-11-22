@@ -6,3 +6,16 @@
 .env.keys
 .env.local
 .env.*.local
+
+
+# Variables de entorno y credenciales
+.env
+.env.*
+!.env.example
+
+# Credenciales de Firebase / Google
+google-services.json
+
+# Otros archivos sensibles
+*.keystore
+*.jks

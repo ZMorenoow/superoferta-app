@@ -28,12 +28,13 @@ import { useBanners } from '../utils/useBanners';
 
 const { width } = Dimensions.get('window');
 const PRIMARY = '#C21807';
+const BG = '#F5F5F7';
+const INK = '#1a1a1a';
 
-
-const SIDE = 16;                              
-const GAP = 16;                               
-const CARD_W = width - 30;                    
-const CARD_H = Math.round(CARD_W / 1.6);      
+const SIDE = 16;
+const GAP = 14;
+const CARD_W = width - 32;
+const CARD_H = Math.round(CARD_W / 1.7);
 const ITEM = CARD_W + GAP;
 const AUTOPLAY_MS = 4000;
 
@@ -59,14 +60,12 @@ function ProgressBars({ count, current, progress }) {
 }
 
 function BannerSlider() {
-  
   const banners = useBanners('home', MOCK_BANNERS);
   const [current, setCurrent] = useState(0);
   const [tick, setTick] = useState(0);
   const progress = useRef(new Animated.Value(0)).current;
   const flatRef = useRef(null);
 
-  
   useEffect(() => {
     if (banners.length === 0) return;
     progress.setValue(0);
@@ -86,7 +85,6 @@ function BannerSlider() {
     return () => anim.stop();
   }, [current, tick, banners.length]);
 
-  
   useEffect(() => {
     setCurrent(0);
   }, [banners]);
@@ -118,7 +116,6 @@ function BannerSlider() {
           const subtitulo = item.subtitulo ?? item.subtitle ?? item.descripcion;
           const imagen = item.imagen_url ?? item.image_url;
 
-          
           if (imagen) {
             return (
               <View style={styles.bannerCard}>
@@ -133,9 +130,10 @@ function BannerSlider() {
             );
           }
 
-          
           return (
             <View style={[styles.bannerCard, styles.bannerCardText, { backgroundColor: item.bg || PRIMARY }]}>
+              <View style={styles.bannerCircleBig} />
+              <View style={styles.bannerCircleSmall} />
               <View style={styles.bannerText}>
                 {!!titulo && <Text style={styles.bannerTitle}>{titulo}</Text>}
                 {!!subtitulo && (
@@ -154,15 +152,15 @@ function BannerSlider() {
   );
 }
 
-const StaticHeader = React.memo(({ router, cartCount }) => (
+const StaticHeader = React.memo(({ router, cartCount, total }) => (
   <View>
     <View style={styles.header}>
       <View>
         <Text style={styles.greeting}>Hola 👋</Text>
         <Text style={styles.headerTitle}>¿Qué necesitas hoy?</Text>
       </View>
-      <TouchableOpacity style={styles.cartBtn} onPress={() => router.push('/cart')}>
-        <Ionicons name="cart-outline" size={26} color={PRIMARY} />
+      <TouchableOpacity style={styles.cartBtn} onPress={() => router.push('/cart')} activeOpacity={0.8}>
+        <Ionicons name="cart-outline" size={24} color={PRIMARY} />
         {cartCount > 0 && (
           <View style={styles.cartBadge}>
             <Text style={styles.cartBadgeText}>{cartCount}</Text>
@@ -176,7 +174,16 @@ const StaticHeader = React.memo(({ router, cartCount }) => (
     <Text style={styles.sectionTitle}>Categorías</Text>
     <CategoryChips />
 
-    <Text style={styles.sectionTitle}>Productos</Text>
+    <View style={styles.sectionRow}>
+      <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0, paddingHorizontal: 0 }]}>
+        Productos
+      </Text>
+      {total > 0 && (
+        <Text style={styles.sectionCount}>
+          {total} {total === 1 ? 'producto' : 'productos'}
+        </Text>
+      )}
+    </View>
   </View>
 ));
 
@@ -293,7 +300,6 @@ export default function HomeScreen() {
   };
 
   const fetchProducts = useCallback(async (q = '') => {
-    
     showTabBar();
     setLoading(true);
     try {
@@ -354,40 +360,48 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.productCard}
         onPress={() => handleProductPress(item)}
-        activeOpacity={0.85}
+        activeOpacity={0.9}
       >
         <View style={styles.productImageWrapper}>
+          <Image
+            source={item.image_url ? { uri: item.image_url } : require('../../assets/images/logo.png')}
+            style={[styles.productImage, noDisponible && { opacity: 0.45 }]}
+          />
+
           {hasDiscount && (
             <View style={styles.discountBadge}>
               <Text style={styles.discountText}>-{discountPct}%</Text>
             </View>
           )}
-          <Image
-            source={item.image_url ? { uri: item.image_url } : require('../../assets/images/logo.png')}
-            style={styles.productImage}
-          />
+
+          {noDisponible && (
+            <View style={styles.stockBadge}>
+              <Text style={styles.stockBadgeText}>Sin stock</Text>
+            </View>
+          )}
+
+          {!noDisponible && (
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => handleAddToCart(item)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="add" size={22} color="#fff" />
+            </TouchableOpacity>
+          )}
         </View>
+
         <View style={styles.productInfo}>
           <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
-          <Text style={styles.productUnit}>{item.unit}</Text>
-          <View style={styles.productFooter}>
-            <View>
-              <Text style={styles.productPrice}>
-                {sinPrecio ? 'Consultar' : `$${item.price.toLocaleString('es-CL')}`}
-              </Text>
-              {hasDiscount && (
-                <Text style={styles.originalPrice}>${item.original_price.toLocaleString('es-CL')}</Text>
-              )}
-            </View>
-            <TouchableOpacity
-              style={[styles.addBtn, noDisponible && styles.addBtnDisabled]}
-              onPress={() => handleAddToCart(item)}
-              disabled={noDisponible}
-            >
-              <Ionicons name={noDisponible ? 'close' : 'add'} size={20} color="#fff" />
-            </TouchableOpacity>
+          {!!item.unit && <Text style={styles.productUnit}>{item.unit}</Text>}
+          <View style={styles.priceRow}>
+            <Text style={[styles.productPrice, noDisponible && { color: '#aaa' }]}>
+              {sinPrecio ? 'Consultar' : `$${item.price.toLocaleString('es-CL')}`}
+            </Text>
+            {hasDiscount && (
+              <Text style={styles.originalPrice}>${item.original_price.toLocaleString('es-CL')}</Text>
+            )}
           </View>
-          {noDisponible && <Text style={styles.outOfStock}>Sin stock</Text>}
         </View>
       </TouchableOpacity>
     );
@@ -396,11 +410,11 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={18} color="#999" style={styles.searchIcon} />
+        <Ionicons name="search-outline" size={19} color="#999" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar productos..."
-          placeholderTextColor="#bbb"
+          placeholderTextColor="#b5b5b5"
           value={search}
           onChangeText={setSearch}
           onSubmitEditing={() => fetchProducts(search)}
@@ -410,7 +424,7 @@ export default function HomeScreen() {
         />
         {search.length > 0 && (
           <TouchableOpacity onPress={() => { setSearch(''); fetchProducts(''); }}>
-            <Ionicons name="close-circle" size={18} color="#ccc" />
+            <Ionicons name="close-circle" size={19} color="#ccc" />
           </TouchableOpacity>
         )}
       </View>
@@ -426,7 +440,9 @@ export default function HomeScreen() {
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.productsList}
           showsVerticalScrollIndicator={false}
-          ListHeaderComponent={<StaticHeader router={router} cartCount={cartCount} />}
+          ListHeaderComponent={
+            <StaticHeader router={router} cartCount={cartCount} total={products.length} />
+          }
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           onScroll={handleScroll}
@@ -440,7 +456,8 @@ export default function HomeScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No se encontraron productos 😕</Text>
+              <Ionicons name="basket-outline" size={64} color="#d8d8d8" />
+              <Text style={styles.emptyText}>No se encontraron productos</Text>
             </View>
           }
         />
@@ -450,94 +467,131 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
+  container: { flex: 1, backgroundColor: BG },
+
+  // Cabecera
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingHorizontal: 20,
-    paddingTop: 8, paddingBottom: 16,
+    paddingTop: 4, paddingBottom: 16,
   },
-  greeting: { fontSize: 13, color: '#888' },
-  headerTitle: { fontSize: 22, color: '#1a1a1a', fontWeight: '800' },
-  cartBtn: { position: 'relative', padding: 4 },
+  greeting: { fontSize: 13, color: '#8a8a8a', fontWeight: '500' },
+  headerTitle: { fontSize: 24, color: INK, fontWeight: '800', letterSpacing: -0.4 },
+  cartBtn: {
+    width: 46, height: 46, borderRadius: 23, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 3px 10px rgba(0,0,0,0.08)',
+  },
   cartBadge: {
-    position: 'absolute', top: 0, right: 0,
-    backgroundColor: PRIMARY, width: 18, height: 18,
-    borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+    position: 'absolute', top: -2, right: -2,
+    backgroundColor: PRIMARY, minWidth: 20, height: 20,
+    borderRadius: 10, paddingHorizontal: 5,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: BG,
   },
   cartBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+
+  // Buscador
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#fff', marginHorizontal: 20,
-    marginTop: 8, marginBottom: 8,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10,
-    boxShadow: '0px 2px 8px rgba(0,0,0,0.06)',
+    marginTop: 8, marginBottom: 12,
+    borderRadius: 16, paddingHorizontal: 16, height: 50,
+    borderWidth: 1, borderColor: '#ececec',
+    boxShadow: '0px 2px 8px rgba(0,0,0,0.04)',
   },
-  searchIcon: { marginRight: 8 },
-  searchInput: { flex: 1, fontSize: 14, color: '#333' },
+  searchIcon: { marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 15, color: '#333' },
 
   // Banners
-  bannerContainer: { marginBottom: 8 },
+  bannerContainer: { marginBottom: 10 },
   bannerCard: {
-    width: CARD_W, height: CARD_H, borderRadius: 18,
+    width: CARD_W, height: CARD_H, borderRadius: 24,
     overflow: 'hidden', backgroundColor: '#eee',
+    boxShadow: '0px 6px 16px rgba(0,0,0,0.12)',
   },
   bannerCardText: {
-    paddingHorizontal: 20, paddingTop: 30, paddingBottom: 16,
+    paddingHorizontal: 22, paddingTop: 30, paddingBottom: 16,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
+  bannerCircleBig: {
+    position: 'absolute', width: 190, height: 190, borderRadius: 95,
+    backgroundColor: 'rgba(255,255,255,0.10)', right: -50, top: -70,
+  },
+  bannerCircleSmall: {
+    position: 'absolute', width: 110, height: 110, borderRadius: 55,
+    backgroundColor: 'rgba(255,255,255,0.08)', left: -30, bottom: -40,
+  },
   bannerText: { flex: 1 },
-  bannerTitle: { fontSize: 18, fontWeight: '800', color: '#fff', marginBottom: 4 },
-  bannerSubtitle: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.9)' },
-  bannerEmoji: { fontSize: 54, marginLeft: 10 },
+  bannerTitle: { fontSize: 20, fontWeight: '800', color: '#fff', marginBottom: 4, letterSpacing: -0.3 },
+  bannerSubtitle: { fontSize: 13, lineHeight: 18, color: 'rgba(255,255,255,0.92)' },
+  bannerEmoji: { fontSize: 58, marginLeft: 10 },
   progressRow: {
-    position: 'absolute', top: 10, left: SIDE + 14,
-    width: CARD_W - 28, flexDirection: 'row', gap: 4,
+    position: 'absolute', top: 12, left: SIDE + 16,
+    width: CARD_W - 32, flexDirection: 'row', gap: 5,
   },
   progressTrack: {
-    flex: 1, height: 3, borderRadius: 2,
+    flex: 1, height: 3.5, borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.4)', overflow: 'hidden',
   },
   progressFill: { height: '100%', backgroundColor: '#fff' },
 
+  // Secciones
   sectionTitle: {
-    fontSize: 17, fontWeight: '800', color: '#1a1a1a',
-    paddingHorizontal: 20, marginBottom: 12, marginTop: 8,
+    fontSize: 18, fontWeight: '800', color: INK,
+    paddingHorizontal: 20, marginBottom: 12, marginTop: 10, letterSpacing: -0.3,
   },
+  sectionRow: {
+    flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between',
+    paddingHorizontal: 20, marginTop: 14, marginBottom: 12,
+  },
+  sectionCount: { fontSize: 12, color: '#9a9a9a', fontWeight: '600' },
+
+  // Productos
   row: { paddingHorizontal: 12, gap: 12, marginBottom: 12 },
   // paddingBottom grande: la tab bar flota encima y no debe tapar el último producto
   productsList: { paddingVertical: 4, paddingBottom: 120 },
   productCard: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    boxShadow: '0px 2px 8px rgba(0,0,0,0.07)',
+    boxShadow: '0px 3px 12px rgba(0,0,0,0.06)',
   },
   productImageWrapper: {
     width: '100%',
-    height: 130,
-    overflow: 'hidden',
-    backgroundColor: '#f0f0f0',
+    height: 140,
+    backgroundColor: '#fff',
   },
+  productImage: { width: '100%', height: '100%', resizeMode: 'cover' },
   discountBadge: {
-    position: 'absolute', top: 8, left: 8, zIndex: 1,
-    backgroundColor: PRIMARY, paddingHorizontal: 8,
-    paddingVertical: 3, borderRadius: 8,
+    position: 'absolute', top: 10, left: 10,
+    backgroundColor: PRIMARY, paddingHorizontal: 9,
+    paddingVertical: 4, borderRadius: 20,
   },
   discountText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  productImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  productInfo: { padding: 12 },
-  productName: { fontSize: 13, fontWeight: '600', color: '#1a1a1a', marginBottom: 2, lineHeight: 18 },
-  productUnit: { fontSize: 11, color: '#aaa', marginBottom: 8 },
-  productFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  productPrice: { fontSize: 16, fontWeight: '800', color: '#1a1a1a' },
-  originalPrice: { fontSize: 11, color: '#aaa', textDecorationLine: 'line-through' },
-  addBtn: {
-    backgroundColor: PRIMARY, width: 30, height: 30,
-    borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+  stockBadge: {
+    position: 'absolute', top: 10, left: 10,
+    backgroundColor: 'rgba(26,26,26,0.75)', paddingHorizontal: 9,
+    paddingVertical: 4, borderRadius: 20,
   },
-  addBtnDisabled: { backgroundColor: '#ccc' },
-  outOfStock: { marginTop: 4, fontSize: 11, color: PRIMARY, fontWeight: '600' },
-  emptyContainer: { alignItems: 'center', marginTop: 60 },
+  stockBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  addBtn: {
+    position: 'absolute', right: 10, bottom: 10,
+    backgroundColor: PRIMARY, width: 36, height: 36,
+    borderRadius: 18, alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 3px 8px rgba(194,24,7,0.35)',
+  },
+  productInfo: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 14 },
+  productName: {
+    fontSize: 13, fontWeight: '600', color: INK,
+    lineHeight: 18, minHeight: 36,
+  },
+  productUnit: { fontSize: 11, color: '#aaa', marginTop: 2 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6, marginTop: 6 },
+  productPrice: { fontSize: 17, fontWeight: '800', color: INK, letterSpacing: -0.3 },
+  originalPrice: { fontSize: 11, color: '#aaa', textDecorationLine: 'line-through' },
+
+  emptyContainer: { alignItems: 'center', marginTop: 60, gap: 10 },
   emptyText: { fontSize: 15, color: '#aaa' },
 });

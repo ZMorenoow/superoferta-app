@@ -49,24 +49,8 @@ const vaciarCarrito = async (admin, idPedido) => {
 };
 
 const marcarCuponUsado = async (admin, idPedido) => {
-  try {
-    const { data: pedido } = await admin
-      .from('pedidos')
-      .select('id_cliente, id_cupon')
-      .eq('id', idPedido)
-      .maybeSingle();
-    if (!pedido?.id_cupon) return;
-
-    const { error } = await admin
-      .from('cupones_usuario')
-      .update({ usado_en: new Date().toISOString() })
-      .eq('id_usuario', pedido.id_cliente)
-      .eq('id_cupon', pedido.id_cupon)
-      .is('usado_en', null);
-    if (error) console.error('No se pudo marcar el cupón como usado', idPedido, error);
-  } catch (err) {
-    console.error('Error marcando el cupón', idPedido, err);
-  }
+  const { error } = await admin.rpc('marcar_cupon_usado', { p_pedido: idPedido });
+  if (error) console.error('No se pudo marcar el cupón como usado', idPedido, error);
 };
 
 Deno.serve(async (req) => {

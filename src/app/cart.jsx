@@ -6,6 +6,7 @@ import {
   Alert,
   FlatList,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
+const BG = '#F5F5F7';
+const INK = '#1a1a1a';
 
 // Horarios de retiro: bloques de 30 min entre 09:00 y 21:00
 const HORA_INICIO = 9;
@@ -299,6 +302,7 @@ export default function CarritoScreen() {
   const subtotal = items.reduce((acc, i) => acc + i.precio * i.cantidad, 0);
   const delivery = 0;
   const total = Math.max(0, subtotal + delivery - descuento.monto);
+  const cantidadTotal = items.reduce((acc, i) => acc + i.cantidad, 0);
 
   // Texto del cupón y, si no aplica, el motivo
   const nombreCategoria = cupon?.categorias?.nombre;
@@ -329,34 +333,41 @@ export default function CarritoScreen() {
     <View style={styles.header}>
       <TouchableOpacity
         onPress={() => router.back()}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        style={styles.backBtn}
+        activeOpacity={0.8}
       >
-        <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+        <Ionicons name="chevron-back" size={22} color={INK} />
       </TouchableOpacity>
-      <Text style={styles.title}>Mi carrito</Text>
-      {mostrarVaciar ? (
-        <TouchableOpacity onPress={vaciarCarrito}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.title}>Mi carrito</Text>
+        {mostrarVaciar && (
+          <Text style={styles.subtitle}>
+            {cantidadTotal} {cantidadTotal === 1 ? 'producto' : 'productos'}
+          </Text>
+        )}
+      </View>
+      {mostrarVaciar && (
+        <TouchableOpacity onPress={vaciarCarrito} style={styles.vaciarBtn} activeOpacity={0.8}>
+          <Ionicons name="trash-outline" size={15} color={PRIMARY} />
           <Text style={styles.vaciar}>Vaciar</Text>
         </TouchableOpacity>
-      ) : (
-        <View style={{ width: 24 }} />
       )}
     </View>
   );
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      <Image source={{ uri: item.imagen }} style={styles.img} />
+      <Image source={{ uri: item.imagen }} style={styles.img} resizeMode="cover" />
       <View style={styles.info}>
         <Text style={styles.nombre} numberOfLines={2}>{item.nombre}</Text>
         <Text style={styles.precio}>{formatCLP(item.precio)}</Text>
       </View>
       <View style={styles.qtyBox}>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCantidad(item.id, -1)}>
+        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCantidad(item.id, -1)} activeOpacity={0.7}>
           <Ionicons name={item.cantidad === 1 ? 'trash-outline' : 'remove'} size={16} color={PRIMARY} />
         </TouchableOpacity>
         <Text style={styles.qtyText}>{item.cantidad}</Text>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCantidad(item.id, 1)}>
+        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCantidad(item.id, 1)} activeOpacity={0.7}>
           <Ionicons name="add" size={16} color={PRIMARY} />
         </TouchableOpacity>
       </View>
@@ -377,7 +388,9 @@ export default function CarritoScreen() {
       <SafeAreaView style={styles.container}>
         <Header mostrarVaciar={false} />
         <View style={styles.empty}>
-          <Ionicons name="cart-outline" size={80} color="#e0e0e0" />
+          <View style={styles.emptyCircle}>
+            <Ionicons name="cart-outline" size={56} color="#cfcfd4" />
+          </View>
           <Text style={styles.emptyTitle}>Tu carrito está vacío</Text>
           <Text style={styles.emptySubtitle}>Agrega productos para comenzar</Text>
         </View>
@@ -395,7 +408,8 @@ export default function CarritoScreen() {
         data={items}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 300 }}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 290 }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListFooterComponent={
           <View>
@@ -424,27 +438,45 @@ export default function CarritoScreen() {
               </View>
             )}
 
+            {/* Retiro: compacto, las horas se deslizan en una sola fila */}
             <View style={styles.retiroBox}>
-              <Text style={styles.retiroTitle}>¿Cuándo retiras tu pedido?</Text>
+              <View style={styles.retiroHeader}>
+                <View style={styles.retiroIcon}>
+                  <Ionicons name="time-outline" size={18} color={PRIMARY} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.retiroTitle}>Hora de retiro</Text>
+                  <Text style={styles.retiroSub}>
+                    {horaRetiro
+                      ? `${diaRetiro === 0 ? 'Hoy' : 'Mañana'} a las ${formatHora(horaRetiro)} hrs`
+                      : 'Elige cuándo pasas a buscarlo'}
+                  </Text>
+                </View>
 
-              <View style={styles.diaRow}>
-                {['Hoy', 'Mañana'].map((label, idx) => (
-                  <TouchableOpacity
-                    key={label}
-                    style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
-                    onPress={() => { setDiaRetiro(idx); setHoraRetiro(null); }}
-                  >
-                    <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                <View style={styles.diaSwitch}>
+                  {['Hoy', 'Mañana'].map((label, idx) => (
+                    <TouchableOpacity
+                      key={label}
+                      style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
+                      onPress={() => { setDiaRetiro(idx); setHoraRetiro(null); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
 
               {horarios.length === 0 ? (
                 <Text style={styles.sinHorarios}>Ya no hay horarios hoy. Elige "Mañana".</Text>
               ) : (
-                <View style={styles.slotsWrap}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.slotsRow}
+                >
                   {horarios.map((d) => {
                     const activo = horaRetiro?.getTime() === d.getTime();
                     return (
@@ -452,6 +484,7 @@ export default function CarritoScreen() {
                         key={d.getTime()}
                         style={[styles.slot, activo && styles.slotActive]}
                         onPress={() => setHoraRetiro(d)}
+                        activeOpacity={0.8}
                       >
                         <Text style={[styles.slotText, activo && styles.slotTextActive]}>
                           {formatHora(d)}
@@ -459,7 +492,7 @@ export default function CarritoScreen() {
                       </TouchableOpacity>
                     );
                   })}
-                </View>
+                </ScrollView>
               )}
             </View>
           </View>
@@ -494,6 +527,7 @@ export default function CarritoScreen() {
           style={[styles.btnConfirmar, !horaRetiro && styles.btnConfirmarDisabled]}
           onPress={confirmarPedido}
           disabled={confirmando}
+          activeOpacity={0.85}
         >
           {confirmando ? (
             <ActivityIndicator color="#fff" />
@@ -509,65 +543,121 @@ export default function CarritoScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
-  title: { fontSize: 26, fontWeight: '800', color: '#1a1a1a' },
-  vaciar: { fontSize: 14, fontWeight: '600', color: PRIMARY },
-  card: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 16, padding: 14,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  container: { flex: 1, backgroundColor: BG },
+
+  header: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 16, paddingTop: 4, paddingBottom: 14,
   },
-  img: { width: 70, height: 70, borderRadius: 12, backgroundColor: '#f0f0f0' },
+  backBtn: {
+    width: 42, height: 42, borderRadius: 21, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 3px 10px rgba(0,0,0,0.08)',
+  },
+  title: { fontSize: 26, fontWeight: '800', color: INK, letterSpacing: -0.5 },
+  subtitle: { fontSize: 12, color: '#9a9a9a', fontWeight: '600', marginTop: 1 },
+  vaciarBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#fdecea', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+  },
+  vaciar: { fontSize: 13, fontWeight: '700', color: PRIMARY },
+
+  // Productos
+  card: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff',
+    borderRadius: 20, padding: 12,
+    boxShadow: '0px 3px 12px rgba(0,0,0,0.05)',
+  },
+  img: { width: 72, height: 72, borderRadius: 16, backgroundColor: '#fff' },
   info: { flex: 1, paddingHorizontal: 12 },
-  nombre: { fontSize: 14, fontWeight: '600', color: '#1a1a1a', marginBottom: 6 },
-  precio: { fontSize: 16, fontWeight: '800', color: PRIMARY },
-  qtyBox: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#f0f0f0', borderRadius: 10, overflow: 'hidden' },
-  qtyBtn: { paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fdecea' },
-  qtyText: { paddingHorizontal: 12, fontSize: 15, fontWeight: '800', color: '#1a1a1a' },
+  nombre: { fontSize: 14, fontWeight: '600', color: INK, marginBottom: 6, lineHeight: 19 },
+  precio: { fontSize: 16, fontWeight: '800', color: PRIMARY, letterSpacing: -0.3 },
+  qtyBox: {
+    flexDirection: 'row', alignItems: 'center', gap: 2,
+    backgroundColor: '#f5f5f7', borderRadius: 22, padding: 3,
+  },
+  qtyBtn: {
+    width: 30, height: 30, borderRadius: 15, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0px 1px 4px rgba(0,0,0,0.08)',
+  },
+  qtyText: { minWidth: 26, textAlign: 'center', fontSize: 15, fontWeight: '800', color: INK },
   separator: { height: 10 },
 
+  // Cupón
   cuponBox: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: '#e8f5ed', borderRadius: 16, padding: 14, marginTop: 16,
+    backgroundColor: '#e8f5ed', borderRadius: 20, padding: 14, marginTop: 16,
   },
   cuponBoxInactivo: { backgroundColor: '#fef3c7' },
   cuponIcon: {
-    width: 36, height: 36, borderRadius: 18, backgroundColor: '#fff',
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',
   },
-  cuponTitulo: { fontSize: 13, fontWeight: '800', color: '#1a1a1a' },
+  cuponTitulo: { fontSize: 13, fontWeight: '800', color: INK },
   cuponTexto: { fontSize: 12, color: '#555', marginTop: 1 },
   cuponMotivo: { fontSize: 12, color: '#B45309', fontWeight: '600', marginTop: 3 },
   cuponQuitar: { fontSize: 13, fontWeight: '700', color: PRIMARY },
 
-  retiroBox: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginTop: 16 },
-  retiroTitle: { fontSize: 15, fontWeight: '800', color: '#1a1a1a', marginBottom: 12 },
-  diaRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  diaBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: '#f5f5f5' },
+  // Retiro (compacto)
+  retiroBox: {
+    backgroundColor: '#fff', borderRadius: 20, paddingVertical: 14, marginTop: 16,
+    boxShadow: '0px 3px 12px rgba(0,0,0,0.05)',
+  },
+  retiroHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, marginBottom: 12,
+  },
+  retiroIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: '#fdecea',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  retiroTitle: { fontSize: 14, fontWeight: '800', color: INK },
+  retiroSub: { fontSize: 12, color: '#8a8a8a', marginTop: 1 },
+  diaSwitch: {
+    flexDirection: 'row', backgroundColor: '#f2f2f4', borderRadius: 18, padding: 3,
+  },
+  diaBtn: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 15 },
   diaBtnActive: { backgroundColor: PRIMARY },
-  diaText: { fontWeight: '700', color: '#555' },
+  diaText: { fontSize: 12, fontWeight: '700', color: '#666' },
   diaTextActive: { color: '#fff' },
-  slotsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slot: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, borderColor: '#e0e0e0' },
-  slotActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  slotText: { fontWeight: '700', color: '#1a1a1a' },
+  slotsRow: { paddingHorizontal: 14, gap: 8 },
+  slot: {
+    paddingHorizontal: 16, paddingVertical: 9, borderRadius: 18,
+    backgroundColor: '#f5f5f7',
+  },
+  slotActive: { backgroundColor: PRIMARY },
+  slotText: { fontSize: 13, fontWeight: '700', color: INK },
   slotTextActive: { color: '#fff' },
-  sinHorarios: { fontSize: 13, color: '#999' },
+  sinHorarios: { fontSize: 13, color: '#999', paddingHorizontal: 14 },
+
+  // Resumen
   summary: {
     position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff',
-    borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36,
-    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 10,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32,
+    boxShadow: '0px -4px 16px rgba(0,0,0,0.08)',
   },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   summaryLabel: { fontSize: 14, color: '#888' },
-  summaryValue: { fontSize: 14, fontWeight: '600', color: '#1a1a1a' },
-  totalRow: { borderTopWidth: 1, borderTopColor: '#f0f0f0', paddingTop: 12, marginTop: 4, marginBottom: 16 },
-  totalLabel: { fontSize: 17, fontWeight: '800', color: '#1a1a1a' },
-  totalValue: { fontSize: 17, fontWeight: '900', color: PRIMARY },
-  btnConfirmar: { backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-  btnConfirmarDisabled: { backgroundColor: '#d9a09a' },
+  summaryValue: { fontSize: 14, fontWeight: '600', color: INK },
+  totalRow: { borderTopWidth: 1, borderTopColor: '#f0f0f2', paddingTop: 12, marginTop: 4, marginBottom: 14 },
+  totalLabel: { fontSize: 17, fontWeight: '800', color: INK },
+  totalValue: { fontSize: 22, fontWeight: '900', color: PRIMARY, letterSpacing: -0.5 },
+  btnConfirmar: {
+    backgroundColor: PRIMARY, borderRadius: 18, paddingVertical: 16, alignItems: 'center',
+    boxShadow: '0px 4px 12px rgba(194,24,7,0.3)',
+  },
+  btnConfirmarDisabled: { backgroundColor: '#d9a09a', boxShadow: 'none' },
   btnConfirmarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+
+  // Vacío
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
+  emptyCircle: {
+    width: 110, height: 110, borderRadius: 55, backgroundColor: '#fff',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+    boxShadow: '0px 3px 12px rgba(0,0,0,0.05)',
+  },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: INK },
   emptySubtitle: { fontSize: 14, color: '#aaa' },
 });
