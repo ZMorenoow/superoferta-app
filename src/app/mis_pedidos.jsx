@@ -18,6 +18,7 @@ import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
 const VERDE = '#1B6B3A';
+const AMARILLO = '#B45309';
 
 const formatHoraRetiro = (iso) => {
   if (!iso) return null;
@@ -70,6 +71,7 @@ export default function MisPedidosScreen() {
           hora_retiro,
           notas,
           codigo_retiro,
+          entregado_en,
           created_at,
           pedido_items (
             id,
@@ -215,6 +217,22 @@ export default function MisPedidosScreen() {
           fondo: '#DCFCE7',
         };
 
+      case 'listo':
+        return {
+          texto: 'Listo para retirar',
+          icono: 'bag-check-outline',
+          color: '#B45309',
+          fondo: '#FEF3C7',
+        };
+
+      case 'entregado':
+        return {
+          texto: 'Entregado',
+          icono: 'checkmark-done-outline',
+          color: '#16A34A',
+          fondo: '#DCFCE7',
+        };
+
       case 'cancelado':
       case 'cancelada':
         return {
@@ -321,7 +339,11 @@ export default function MisPedidosScreen() {
             </Text>
 
             {pedidos.map((pedido) => {
-              const estado = obtenerEstado(pedido.estado);
+              // "completado" = el picker terminó de preparar; "entregado" solo cuando el admin confirma el retiro
+              const entregado = !!pedido.entregado_en;
+              const estado = obtenerEstado(
+                entregado ? 'entregado' : pedido.estado === 'completado' ? 'listo' : pedido.estado
+              );
               const estaExpandido = expanded === pedido.id;
               const cantidadProductos =
                 obtenerCantidadProductos(pedido);
@@ -486,7 +508,7 @@ export default function MisPedidosScreen() {
                   )}
 
                   {/* HORA DE RETIRO (solo mientras el pedido no está completado) */}
-                  {pedido.hora_retiro && !completado && (
+                  {pedido.hora_retiro && !entregado && (
                     <View style={styles.retiroHoraRow}>
                       <Ionicons name="time-outline" size={16} color={PRIMARY} />
                       <Text style={styles.retiroHoraText}>
@@ -513,16 +535,20 @@ export default function MisPedidosScreen() {
                     </Text>
                   </View>
 
-                  {/* CÓDIGO DE RETIRO */}
+                  {/* CÓDIGO DE RETIRO: amarillo por entregar, verde cuando se entrega */}
                   {pedido.codigo_retiro ? (
-                    <View style={styles.retiroRow}>
+                    <View style={[styles.retiroRow, !entregado && styles.retiroRowPendiente]}>
                       <View style={styles.retiroTextos}>
-                        <Text style={styles.retiroLabel}>
-                          Código de retiro
+                        <Text style={[styles.retiroLabel, !entregado && { color: AMARILLO }]}>
+                          {entregado
+                            ? 'Pedido entregado'
+                            : completado
+                            ? 'Listo para retirar'
+                            : 'Código de retiro'}
                         </Text>
 
                         <Text style={styles.retiroHint}>
-                          Muéstralo en la sucursal
+                          {entregado ? 'Retiro confirmado' : 'Muéstralo en la sucursal'}
                         </Text>
                       </View>
 
@@ -1009,6 +1035,12 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: VERDE,
     backgroundColor: '#F0FFF4',
+  },
+
+  // Código de retiro aún sin entregar: amarillo
+  retiroRowPendiente: {
+    borderColor: '#D97706',
+    backgroundColor: '#FFFBEB',
   },
 
   retiroTextos: {

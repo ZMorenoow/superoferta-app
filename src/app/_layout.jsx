@@ -3,10 +3,13 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { usePushNotifications } from '../utils/notificaciones';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  usePushNotifications();
+
   useEffect(() => {
     SplashScreen.hideAsync();
   }, []);
@@ -24,6 +27,7 @@ export default function RootLayout() {
         <Stack.Screen name="order-status" />
         <Stack.Screen name="product-detail" />
         <Stack.Screen name="picker" />
+        <Stack.Screen name="admin" />
       </Stack>
     </SafeAreaProvider>
   );

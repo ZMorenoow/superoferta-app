@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
+import { useRealtime } from '../utils/useRealtime';
 
 const PRIMARY = '#C21807';
 const VERDE = '#1B6B3A';
@@ -46,8 +47,7 @@ export default function SustitucionScreen() {
 
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [respondiendo, setRespondiendo] = useState(null); 
-
+  const [respondiendo, setRespondiendo] = useState(null);
 
   const enCurso = useRef(false);
 
@@ -71,6 +71,17 @@ export default function SustitucionScreen() {
     useCallback(() => {
       cargar();
     }, [cargar])
+  );
+
+  // Tiempo real: si el preparador propone, cambia o retira un reemplazo, se actualiza solo
+  useRealtime(
+    'sustitucion-cliente',
+    [
+      { table: 'sustituciones' },
+      { table: 'pedido_items', filter: `id_pedido=eq.${pedido}` },
+    ],
+    cargar,
+    !!pedido
   );
 
   const pendientes = items
@@ -135,7 +146,7 @@ export default function SustitucionScreen() {
           {pendientes.map(({ item, sust }) => {
             const diff =
               sust.precio_unitario * sust.cantidad - item.precio_unitario * item.cantidad;
-            const ocupado = respondiendo !== null; 
+            const ocupado = respondiendo !== null;
             const esteCargando = respondiendo === sust.id;
 
             return (

@@ -81,7 +81,7 @@ export default function LoginScreen() {
       console.warn('No se pudo guardar el rol', e);
     }
 
-    router.replace(perfil.rol === 'picker' ? '/picker' : '/(tabs)');
+    router.replace(perfil.rol === 'admin' ? '/admin' : perfil.rol === 'picker' ? '/picker' : '/(tabs)');
   };
 
   const handleLogin = async () => {

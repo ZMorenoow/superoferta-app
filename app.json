@@ -21,7 +21,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.zmorenoowsteam.superofertasmym"
+      "package": "com.zmorenoowsteam.superofertasmym",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "single",
@@ -51,7 +52,13 @@
       "expo-font",
       "expo-web-browser",
       "expo-image",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "color": "#C21807"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
