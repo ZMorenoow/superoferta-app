@@ -28,12 +28,10 @@ Una app de delivery de supermercado donde los clientes arman su compra y los pic
 | | Tecnología | Para qué |
 | :-: | --- | --- |
 | 🟨 | **JavaScript (JSX)** | Lenguaje de toda la app |
-| 📱 | **Expo SDK 57** · React Native 0.81 · React 19 | Base de la app |
+| 📱 | **Expo SDK 58** · React Native 0.81 · React 19 | Base de la app |
 | 🧭 | **Expo Router 6** | Navegación basada en archivos |
 | ⚡ | **Supabase** · PostgreSQL | Base de datos con políticas RLS por rol |
 | 💳 | **Transbank** | Pasarela de pagos |
-| 🗺️ | **OpenStreetMap** | Mapas y geolocalización |
-| 🧠 | **Zustand** | Estado global |
 | 🌐 | **Axios** | Comunicación con el servidor |
 | ✨ | **Reanimated 4** · Gesture Handler | Animaciones y gestos |
 | 🚀 | **EAS Build** | Generación de builds Android e iOS |
