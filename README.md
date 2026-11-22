@@ -1,6 +1,11 @@
 <div align="center">
 
-# 🛒 Super Ofertas
+  <tr>
+            <td align="center" style="background-color:#9B1C1C; padding:32px 24px;">
+              <img src="https://pnhwofjsmqrmcdrsfpxg.supabase.co/storage/v1/object/public/Fotos%20de%20gmail/unnamed.png" width="140" alt="SuperOferta" style="display:block; margin:0 auto; border:0; height:auto;">
+              <div style="font-size:13px; color:#FFE3DF; margin-top:8px;">Tus ofertas, a un toque</div>
+            </td>
+</tr>
 
 **Tu supermercado, a un toque de distancia.**
 
