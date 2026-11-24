@@ -16,7 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScannerOverlay from '../../components/ScannerOverlay';
 import { supabase } from '../../utils/supabase';
 
@@ -38,20 +38,25 @@ const formatHoraRetiro = (iso) => {
   return `${dia} ${hh} hrs`;
 };
 
-
 const normalizar = (c) => String(c ?? '').replace(/\D/g, '').replace(/^0+/, '');
 
-const PAUSA_TRAS_ESCANEO = 1200; 
-const AUSENCIA_MINIMA = 1000;    
+const PAUSA_TRAS_ESCANEO = 1200;
+const AUSENCIA_MINIMA = 1000;
 
 const MOTIVOS = ['Sin stock', 'En mal estado', 'No lo encuentro'];
 
-const MIN_FOTOS = 1; 
+const MIN_FOTOS = 1;
 const MAX_FOTOS = 6;
+
+// Alto aproximado del footer sin contar la zona segura inferior
+const FOOTER_BASE = 110;
 
 export default function PedidoScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
+  // Espacio inferior real (barra de 3 botones / gestos de Android, home indicator de iOS)
+  const bottomSeguro = Math.max(insets.bottom, 16);
 
   const volver = () => {
     if (router.canGoBack()) router.back();
@@ -59,7 +64,6 @@ export default function PedidoScreen() {
   };
 
   const { id, pedido: pedidoParam } = useLocalSearchParams();
-
 
   let pedidoId = id;
   if (!pedidoId && pedidoParam) {
@@ -74,21 +78,19 @@ export default function PedidoScreen() {
   const [loading, setLoading] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
   const [escaneando, setEscaneando] = useState(false);
-  const [feedback, setFeedback] = useState(null); 
+  const [feedback, setFeedback] = useState(null);
   const procesando = useRef(false);
   const ultimaLectura = useRef({ codigo: null, t: 0 });
   const [permiso, pedirPermiso] = useCameraPermissions();
 
-
-  const [faltante, setFaltante] = useState(null); 
-  const [editando, setEditando] = useState(false); 
+  const [faltante, setFaltante] = useState(null);
+  const [editando, setEditando] = useState(false);
   const [motivo, setMotivo] = useState(MOTIVOS[0]);
   const [sugerencia, setSugerencia] = useState('');
 
-
   const camaraRef = useRef(null);
   const [evidenciaAbierta, setEvidenciaAbierta] = useState(false);
-  const [fotos, setFotos] = useState([]); 
+  const [fotos, setFotos] = useState([]);
   const [tomando, setTomando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
 
@@ -102,11 +104,13 @@ export default function PedidoScreen() {
       .from('pedidos')
       .select(`
         id,
+        id_cliente,
         estado,
         total,
         reembolso_pendiente,
         direccion_entrega,
         hora_retiro,
+        cliente:perfiles!id_cliente ( nombre ),
         pedido_items (
           id,
           cantidad,
@@ -138,7 +142,6 @@ export default function PedidoScreen() {
     setLoading(false);
   }, [pedidoId]);
 
- 
   useFocusEffect(
     useCallback(() => {
       cargar();
@@ -168,7 +171,6 @@ export default function PedidoScreen() {
   const completo = (i) => recogidas(i) >= i.cantidad;
   const esFaltante = (i) => i.estado === 'faltante';
 
-
   const sustPendiente = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'propuesta');
   const sustAceptada = (i) => (i.sustituciones ?? []).some((s) => s.estado === 'aceptada');
   const sustActual = (i) => {
@@ -186,10 +188,11 @@ export default function PedidoScreen() {
   const hayPendientes = items.some(sustPendiente);
   const pct = items.length ? Math.round((completados / items.length) * 100) : 0;
 
+  const nombreCliente = pedido?.cliente?.nombre?.trim() || 'Cliente';
+
   const abrirSustituto = (item) => {
     router.push({ pathname: '/picker/sustituto', params: { item: item.id } });
   };
-
 
   const asegurarEnProceso = async () => {
     if (pedido?.estado !== 'asignado') return;
@@ -211,7 +214,6 @@ export default function PedidoScreen() {
     setEscaneando(true);
   };
 
-
   const registrarUnidad = async (item) => {
     setTrabajando(true);
     try {
@@ -219,7 +221,7 @@ export default function PedidoScreen() {
       const { data, error } = await supabase.rpc('escanear_unidad', { p_item: item.id });
       if (error) throw error;
       const fila = data?.[0];
-      if (!fila) return 'completo'; 
+      if (!fila) return 'completo';
       await cargar();
       return fila.nueva_cantidad;
     } catch (e) {
@@ -235,9 +237,7 @@ export default function PedidoScreen() {
     const objetivo = normalizar(codigo);
     const ult = ultimaLectura.current;
 
-
     const sigueEnPantalla = ult.codigo === objetivo && ahora - ult.t < AUSENCIA_MINIMA;
-
 
     ultimaLectura.current = { codigo: objetivo, t: ahora };
 
@@ -245,7 +245,6 @@ export default function PedidoScreen() {
     procesando.current = true;
 
     try {
-
       const candidatos = items.filter(
         (i) => normalizar(i.productos?.codigo_barra) === objetivo
       );
@@ -291,13 +290,11 @@ export default function PedidoScreen() {
         texto: `${item.productos?.nombre}: ${nueva} de ${item.cantidad}`,
       });
     } finally {
-
       setTimeout(() => {
         procesando.current = false;
       }, PAUSA_TRAS_ESCANEO);
     }
   };
-
 
   const abrirFaltante = (item) => {
     setMotivo(item.motivo_faltante ?? MOTIVOS[0]);
@@ -310,7 +307,6 @@ export default function PedidoScreen() {
     if (trabajando) return;
     setFaltante(null);
   };
-
 
   const quitarFaltante = async () => {
     if (!faltante) return;
@@ -352,7 +348,6 @@ export default function PedidoScreen() {
       setSugerencia('');
       await cargar();
 
-
       if (!eraEdicion) {
         Alert.alert('Cliente avisado', '¿Quieres sugerirle un producto de reemplazo?', [
           { text: 'Ahora no', style: 'cancel' },
@@ -370,7 +365,6 @@ export default function PedidoScreen() {
       setTrabajando(false);
     }
   };
-
 
   const abrirEvidencia = async () => {
     if (!permiso?.granted) {
@@ -404,7 +398,6 @@ export default function PedidoScreen() {
   };
 
   const quitarFoto = (idx) => setFotos((prev) => prev.filter((_, i) => i !== idx));
-
 
   const subirEvidencias = async () => {
     const filas = [];
@@ -462,7 +455,6 @@ export default function PedidoScreen() {
 
   const yaCompletado = pedido?.estado === 'completado' || pedido?.estado === 'entregado';
 
-
   const reembolso = Number(pedido?.reembolso_pendiente || 0);
   const totalEntregar = Number(pedido?.total || 0) - reembolso;
   const hayAjuste = reembolso !== 0;
@@ -472,6 +464,7 @@ export default function PedidoScreen() {
     const sinStock = esFaltante(item);
     const parcial = !listo && !sinStock && recogidas(item) > 0;
     const sust = sinStock ? sustActual(item) : null;
+    const codigo = item.productos?.codigo_barra;
 
     let textoSust = null;
     if (sust?.estado === 'propuesta') {
@@ -507,6 +500,17 @@ export default function PedidoScreen() {
             {item.id_item_origen ? 'Reemplazo · ' : ''}
             {item.productos?.nombre ?? 'Producto'}
           </Text>
+
+          {/* Código de barras bajo el nombre, para encontrar el producto rápido */}
+          {!!codigo && (
+            <View style={styles.codigoRow}>
+              <Ionicons name="barcode-outline" size={14} color="#666" />
+              <Text style={styles.productCodigo} selectable>
+                {codigo}
+              </Text>
+            </View>
+          )}
+
           <Text
             style={[
               styles.productUnit,
@@ -527,7 +531,6 @@ export default function PedidoScreen() {
         <View style={styles.actions}>
           {listo && <Ionicons name="checkmark-circle" size={28} color={VERDE} />}
 
-          {/* Faltante: botón para sugerir reemplazo */}
           {puedeSugerir && (
             <TouchableOpacity
               style={styles.notFoundBtn}
@@ -538,7 +541,6 @@ export default function PedidoScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Faltante: botón para editar motivo/sugerencia o quitarlo */}
           {sinStock && !yaCompletado && !sustAceptada(item) && (
             <TouchableOpacity
               style={styles.notFoundBtn}
@@ -610,6 +612,16 @@ export default function PedidoScreen() {
           </Text>
         </View>
       </View>
+
+      {/* Cliente que retira el pedido */}
+      <View style={styles.clienteBar}>
+        <Ionicons name="person-circle-outline" size={22} color="#1a1a1a" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.clienteLabel}>Cliente</Text>
+          <Text style={styles.clienteNombre} numberOfLines={1}>{nombreCliente}</Text>
+        </View>
+      </View>
+
       {pedido.hora_retiro && (
         <View style={styles.retiroBadge}>
           <Ionicons name="time-outline" size={16} color={PRIMARY} />
@@ -645,11 +657,11 @@ export default function PedidoScreen() {
         data={items}
         renderItem={renderProducto}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: FOOTER_BASE + bottomSeguro }]}
         showsVerticalScrollIndicator={false}
       />
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: bottomSeguro + 12 }]}>
         <View>
           <Text style={styles.footerLabel}>
             {hayAjuste ? 'Total a entregar' : 'Total del pedido'}
@@ -714,7 +726,7 @@ export default function PedidoScreen() {
             </TouchableOpacity>
           </SafeAreaView>
 
-          <View style={styles.evBottom}>
+          <View style={[styles.evBottom, { paddingBottom: bottomSeguro + 18 }]}>
             {fotos.length > 0 && (
               <FlatList
                 data={fotos}
@@ -848,6 +860,22 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   progressText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+
+  // Cliente y hora de retiro
+  clienteBar: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  clienteLabel: { fontSize: 11, color: '#888', fontWeight: '600' },
+  clienteNombre: { fontSize: 16, fontWeight: '800', color: '#1a1a1a' },
+  retiroBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 16, paddingVertical: 8,
+    backgroundColor: '#fdecea',
+  },
+  retiroBadgeText: { fontSize: 13, fontWeight: '800', color: PRIMARY },
+
   progressBarContainer: {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingVertical: 10,
@@ -872,6 +900,8 @@ const styles = StyleSheet.create({
   imageVacia: { alignItems: 'center', justifyContent: 'center' },
   productInfo: { flex: 1, marginLeft: 12, paddingRight: 8 },
   productName: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
+  codigoRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  productCodigo: { fontSize: 12, fontWeight: '700', color: '#555', letterSpacing: 0.8 },
   productUnit: { fontSize: 12, color: '#888', marginTop: 2 },
   productSust: { fontSize: 12, fontWeight: '600', color: '#555', marginTop: 3 },
   productPrice: { fontSize: 14, fontWeight: '800', color: '#1a1a1a', marginTop: 4 },
@@ -889,7 +919,7 @@ const styles = StyleSheet.create({
   avisoEsperaTexto: { flex: 1, fontSize: 12, fontWeight: '600', color: '#92400E' },
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#fff', padding: 20, paddingBottom: 34,
+    backgroundColor: '#fff', paddingTop: 20, paddingHorizontal: 20, paddingBottom: 34,
     borderTopWidth: 1, borderTopColor: '#f0f0f0',
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
@@ -925,7 +955,7 @@ const styles = StyleSheet.create({
   },
   evBottom: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)', padding: 16, paddingBottom: 34, alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)', paddingTop: 16, paddingHorizontal: 16, paddingBottom: 34, alignItems: 'center',
   },
   evMini: { width: 64, height: 64, borderRadius: 10, backgroundColor: '#222' },
   evQuitar: {

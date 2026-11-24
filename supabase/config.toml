@@ -448,3 +448,20 @@ entrypoint = "./functions/webpay-return/index.js"
 # static_files = [ "./functions/webpay-return/*.html" ]
 [functions.notificar]
 entrypoint = "./functions/notificar/index.js"
+
+
+[functions.oneclick-inscription-start]
+entrypoint = "./functions/oneclick-inscription-start/index.js"
+
+[functions.oneclick-inscription-return]
+verify_jwt = false
+entrypoint = "./functions/oneclick-inscription-return/index.js"
+
+[functions.oneclick-card-info]
+entrypoint = "./functions/oneclick-card-info/index.js"
+
+[functions.oneclick-card-delete]
+entrypoint = "./functions/oneclick-card-delete/index.js"
+
+[functions.oneclick-payment]
+entrypoint = "./functions/oneclick-payment/index.js"

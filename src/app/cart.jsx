@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
   Image,
   ScrollView,
@@ -12,7 +13,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import OneclickPaymentSection from '../components/OneclickPaymentSection';
 import { supabase } from '../utils/supabase';
 
 const PRIMARY = '#C21807';
@@ -46,9 +48,26 @@ const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;
 
 export default function CarritoScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmando, setConfirmando] = useState(false);
+
+  // Estados para creación del pedido y selección de pago
+  const [creandoPedido, setCreandoPedido] = useState(false);
+  const [pedidoPendienteId, setPedidoPendienteId] = useState(null);
+  const [cancelando, setCancelando] = useState(false);
+
+  // true mientras Oneclick cobra o inscribe una tarjeta: se bloquea Webpay, cancelar y salir
+  const [oneclickBusy, setOneclickBusy] = useState(false);
+
+  // Copias para leer dentro de efectos y handlers sin volver a dispararlos
+  const pedidoRef = useRef(null);
+  pedidoRef.current = pedidoPendienteId;
+  const busyRef = useRef(false);
+  busyRef.current = oneclickBusy;
+
   const [diaRetiro, setDiaRetiro] = useState(0); // 0 = hoy, 1 = mañana
   const [horaRetiro, setHoraRetiro] = useState(null);
 
@@ -56,12 +75,16 @@ export default function CarritoScreen() {
   const [cupon, setCupon] = useState(null);
   const [descuento, setDescuento] = useState({ monto: 0, motivo: null });
 
+  // Espacio inferior para no chocar con la barra de navegación del celular
+  const bottomPad = Math.max(insets.bottom + 16, 28);
+
   const cargarCarrito = useCallback(async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
       router.replace('/login');
+      setLoading(false);
       return;
     }
 
@@ -111,6 +134,7 @@ export default function CarritoScreen() {
 
     let porProducto = {};
     const ids = (carritoItems || []).map((ci) => ci.id_producto);
+
     if (perfil?.id_sucursal_preferida && ids.length > 0) {
       const { data: ps } = await supabase
         .from('producto_sucursal')
@@ -118,6 +142,7 @@ export default function CarritoScreen() {
         .eq('id_sucursal', perfil.id_sucursal_preferida)
         .eq('activo', true)
         .in('id_producto', ids);
+
       porProducto = Object.fromEntries((ps || []).map((p) => [p.id_producto, p]));
     }
 
@@ -135,14 +160,113 @@ export default function CarritoScreen() {
         };
       })
     );
+
     setLoading(false);
+  }, [router]);
+
+  // Si el pedido pendiente ya no está pendiente (se canceló en Webpay, expiró o se pagó),
+  // se limpia para que la pantalla no quede mostrando opciones de pago de un pedido muerto
+  const validarPedidoPendiente = useCallback(async () => {
+    const id = pedidoRef.current;
+    if (!id) return;
+
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('estado')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) return;
+    if (!data || data.estado !== 'pendiente') setPedidoPendienteId(null);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       cargarCarrito();
-    }, [cargarCarrito])
+      validarPedidoPendiente();
+    }, [cargarCarrito, validarPedidoPendiente])
   );
+
+  // Salir con un pedido pendiente: se pregunta y se cancela para devolver el stock reservado
+  const salirCancelando = useCallback(() => {
+    // Con un cobro o inscripción de Oneclick en curso no se puede salir ni cancelar
+    if (busyRef.current) return;
+
+    Alert.alert(
+      'Salir del pago',
+      'Si sales ahora se cancelará el pedido que acabas de crear. ¿Quieres continuar?',
+      [
+        { text: 'Seguir pagando', style: 'cancel' },
+        {
+          text: 'Cancelar pedido y salir',
+          style: 'destructive',
+          onPress: async () => {
+            // Pudo iniciarse un cobro mientras la alerta estaba abierta
+            if (busyRef.current) return;
+
+            const id = pedidoRef.current;
+            if (id) {
+              const { error } = await supabase.rpc('cancelar_pedido_pendiente', { p_pedido: id });
+              if (error) console.error('No se pudo cancelar el pedido pendiente', error);
+            }
+            setPedidoPendienteId(null);
+            router.back();
+          },
+        },
+      ]
+    );
+  }, [router]);
+
+  // Botón físico de atrás en Android
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        // Pago en curso: se ignora el botón de atrás
+        if (busyRef.current) return true;
+
+        if (pedidoRef.current) {
+          salirCancelando();
+          return true;
+        }
+        return false;
+      });
+      return () => sub.remove();
+    }, [salirCancelando])
+  );
+
+  // Cancelar el pedido y volver al carrito para cambiar hora o productos
+  const cancelarPedidoPendiente = () => {
+    if (!pedidoPendienteId || cancelando || oneclickBusy) return;
+
+    Alert.alert(
+      'Cancelar pedido',
+      'Se cancelará el pedido y podrás cambiar la hora o los productos del carrito.',
+      [
+        { text: 'Volver', style: 'cancel' },
+        {
+          text: 'Cancelar pedido',
+          style: 'destructive',
+          onPress: async () => {
+            if (busyRef.current) return;
+
+            setCancelando(true);
+            const { error } = await supabase.rpc('cancelar_pedido_pendiente', {
+              p_pedido: pedidoPendienteId,
+            });
+            setCancelando(false);
+
+            if (error) {
+              Alert.alert('Error', 'No se pudo cancelar el pedido. Intenta de nuevo.');
+              return;
+            }
+
+            setPedidoPendienteId(null);
+            cargarCarrito();
+          },
+        },
+      ]
+    );
+  };
 
   // Busca el cupón activo y pide al servidor cuánto descuenta con el carrito actual
   const calcularCupon = useCallback(async () => {
@@ -157,6 +281,7 @@ export default function CarritoScreen() {
       .limit(1);
 
     const activo = filas?.[0]?.cupones;
+
     if (!activo) {
       setCupon(null);
       setDescuento({ monto: 0, motivo: null });
@@ -168,11 +293,13 @@ export default function CarritoScreen() {
     });
 
     setCupon(activo);
+
     if (error || !data?.[0]) {
       console.error('Error calculando cupón', error);
       setDescuento({ monto: 0, motivo: 'no_disponible' });
       return;
     }
+
     setDescuento({ monto: data[0].monto_descuento ?? 0, motivo: data[0].motivo ?? null });
   }, []);
 
@@ -182,16 +309,30 @@ export default function CarritoScreen() {
   }, [items, loading, calcularCupon]);
 
   const quitarCupon = async () => {
+    if (pedidoPendienteId) return;
     if (!cupon) return;
-    const { error } = await supabase.rpc('desactivar_cupon', { p_id_cupon: cupon.id });
+
+    const { error } = await supabase.rpc('desactivar_cupon', {
+      p_id_cupon: cupon.id,
+    });
+
     if (error) {
       Alert.alert('Error', 'No se pudo quitar el cupón');
       return;
     }
+
     calcularCupon();
   };
 
   const updateCantidad = async (itemId, delta) => {
+    if (pedidoPendienteId) {
+      Alert.alert(
+        'Pedido creado',
+        'No puedes modificar el carrito mientras eliges el medio de pago.'
+      );
+      return;
+    }
+
     const item = items.find((i) => i.id === itemId);
     if (!item) return;
 
@@ -203,11 +344,16 @@ export default function CarritoScreen() {
     }
 
     if (nuevaCantidad <= 0) {
-      const { error } = await supabase.from('carrito_items').delete().eq('id', itemId);
+      const { error } = await supabase
+        .from('carrito_items')
+        .delete()
+        .eq('id', itemId);
+
       if (error) {
         Alert.alert('Error', 'No se pudo eliminar el producto');
         return;
       }
+
       setItems((prev) => prev.filter((i) => i.id !== itemId));
       return;
     }
@@ -228,6 +374,14 @@ export default function CarritoScreen() {
   };
 
   const vaciarCarrito = () => {
+    if (pedidoPendienteId) {
+      Alert.alert(
+        'Pedido creado',
+        'No puedes vaciar el carrito mientras el pedido está pendiente de pago.'
+      );
+      return;
+    }
+
     Alert.alert('Vaciar carrito', '¿Estás seguro?', [
       { text: 'Cancelar', style: 'cancel' },
       {
@@ -237,51 +391,54 @@ export default function CarritoScreen() {
           const ids = items.map((i) => i.id);
           if (ids.length === 0) return;
 
-          const { error } = await supabase.from('carrito_items').delete().in('id', ids);
+          const { error } = await supabase
+            .from('carrito_items')
+            .delete()
+            .in('id', ids);
+
           if (error) {
             Alert.alert('Error', 'No se pudo vaciar el carrito');
             return;
           }
+
           setItems([]);
         },
       },
     ]);
   };
 
+  // Se crea una sola vez el pedido. Oneclick y Webpay utilizan el mismo ID.
   const confirmarPedido = async () => {
-    if (items.length === 0 || confirmando) return;
+    if (items.length === 0 || creandoPedido || pedidoPendienteId) return;
+
     if (!horaRetiro) {
       Alert.alert('Hora de retiro', 'Elige a qué hora vas a retirar tu pedido.');
       return;
     }
-    setConfirmando(true);
+
+    setCreandoPedido(true);
 
     try {
-      // Solo se envía el cupón si realmente descuenta algo
       const args = { p_hora_retiro: horaRetiro.toISOString() };
-      if (cupon && descuento.monto > 0) args.p_id_cupon = cupon.id;
+
+      // Solo se envía el cupón si realmente descuenta algo
+      if (cupon && descuento.monto > 0) {
+        args.p_id_cupon = cupon.id;
+      }
 
       const { data: pedidoId, error: pedidoError } = await supabase.rpc(
         'crear_pedido_desde_carrito',
         args
       );
+
       if (pedidoError) throw pedidoError;
+      if (!pedidoId) throw new Error('No se recibió el identificador del pedido.');
 
-      const { data: pago, error: pagoError } = await supabase.functions.invoke(
-        'webpay-create',
-        { body: { id_pedido: pedidoId } }
-      );
-      if (pagoError || !pago?.url || !pago?.token) {
-        throw pagoError ?? new Error('Respuesta de pago incompleta');
-      }
-
-      router.push({
-        pathname: '/pago-webpay',
-        params: { url: pago.url, token: pago.token, pedido: pedidoId },
-      });
+      // Guardamos el pedido y mostramos las opciones de pago
+      setPedidoPendienteId(pedidoId);
     } catch (e) {
-      console.error('Error al iniciar el pago', e);
-      // Mensajes del servidor que sí conviene mostrar tal cual (sin stock, sin sucursal, etc.).
+      console.error('Error al crear pedido', e);
+
       const mensajesVisibles = [
         'Stock insuficiente',
         'Producto no disponible',
@@ -289,10 +446,47 @@ export default function CarritoScreen() {
         'Hora de retiro',
         'Cupón',
       ];
+
       const mostrar = mensajesVisibles.some((m) => e?.message?.startsWith(m));
+
       Alert.alert(
         'No se pudo continuar',
-        mostrar ? e.message : 'No se pudo iniciar el pago. Intenta de nuevo.'
+        mostrar ? e.message : 'No se pudo crear el pedido. Intenta nuevamente.'
+      );
+    } finally {
+      setCreandoPedido(false);
+    }
+  };
+
+  // Pago con Webpay Plus: utiliza el pedido que ya fue creado
+  const pagarWebpay = async () => {
+    if (!pedidoPendienteId || confirmando || oneclickBusy) return;
+
+    setConfirmando(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('webpay-create', {
+        body: { id_pedido: pedidoPendienteId },
+      });
+
+      if (error || !data?.url || !data?.token) {
+        throw error ?? new Error('Respuesta de Webpay incompleta');
+      }
+
+      router.push({
+        pathname: '/pago-webpay',
+        params: {
+          url: data.url,
+          token: data.token,
+          pedido: pedidoPendienteId,
+        },
+      });
+    } catch (e) {
+      console.error('Error iniciando Webpay', e);
+
+      Alert.alert(
+        'Webpay Plus',
+        e?.message ?? 'No se pudo iniciar el pago. Intenta nuevamente.'
       );
     } finally {
       setConfirmando(false);
@@ -306,6 +500,7 @@ export default function CarritoScreen() {
 
   // Texto del cupón y, si no aplica, el motivo
   const nombreCategoria = cupon?.categorias?.nombre;
+
   const etiquetaCupon = cupon
     ? `${cupon.tipo === 'porcentaje' ? `${cupon.valor}%` : formatCLP(cupon.valor)} dcto.${
         nombreCategoria ? ` en ${nombreCategoria}` : ''
@@ -329,25 +524,37 @@ export default function CarritoScreen() {
     }
   })();
 
-  const Header = ({ mostrarVaciar }) => (
+  // Se llama como función (no como componente) para que no se desmonte en cada render
+  const renderHeader = (mostrarVaciar) => (
     <View style={styles.header}>
       <TouchableOpacity
-        onPress={() => router.back()}
-        style={styles.backBtn}
+        onPress={() => {
+          if (oneclickBusy) return;
+          if (pedidoPendienteId) salirCancelando();
+          else router.back();
+        }}
+        style={[styles.backBtn, oneclickBusy && styles.btnBloqueado]}
         activeOpacity={0.8}
       >
         <Ionicons name="chevron-back" size={22} color={INK} />
       </TouchableOpacity>
+
       <View style={{ flex: 1 }}>
         <Text style={styles.title}>Mi carrito</Text>
+
         {mostrarVaciar && (
           <Text style={styles.subtitle}>
             {cantidadTotal} {cantidadTotal === 1 ? 'producto' : 'productos'}
           </Text>
         )}
       </View>
+
       {mostrarVaciar && (
-        <TouchableOpacity onPress={vaciarCarrito} style={styles.vaciarBtn} activeOpacity={0.8}>
+        <TouchableOpacity
+          onPress={vaciarCarrito}
+          style={styles.vaciarBtn}
+          activeOpacity={0.8}
+        >
           <Ionicons name="trash-outline" size={15} color={PRIMARY} />
           <Text style={styles.vaciar}>Vaciar</Text>
         </TouchableOpacity>
@@ -357,17 +564,39 @@ export default function CarritoScreen() {
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
-      <Image source={{ uri: item.imagen }} style={styles.img} resizeMode="cover" />
+      {item.imagen ? (
+        <Image source={{ uri: item.imagen }} style={styles.img} resizeMode="cover" />
+      ) : (
+        <View style={[styles.img, styles.imgPlaceholder]}>
+          <Ionicons name="image-outline" size={25} color="#ccc" />
+        </View>
+      )}
+
       <View style={styles.info}>
         <Text style={styles.nombre} numberOfLines={2}>{item.nombre}</Text>
         <Text style={styles.precio}>{formatCLP(item.precio)}</Text>
       </View>
+
       <View style={styles.qtyBox}>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCantidad(item.id, -1)} activeOpacity={0.7}>
-          <Ionicons name={item.cantidad === 1 ? 'trash-outline' : 'remove'} size={16} color={PRIMARY} />
+        <TouchableOpacity
+          style={styles.qtyBtn}
+          onPress={() => updateCantidad(item.id, -1)}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={item.cantidad === 1 ? 'trash-outline' : 'remove'}
+            size={16}
+            color={PRIMARY}
+          />
         </TouchableOpacity>
+
         <Text style={styles.qtyText}>{item.cantidad}</Text>
-        <TouchableOpacity style={styles.qtyBtn} onPress={() => updateCantidad(item.id, 1)} activeOpacity={0.7}>
+
+        <TouchableOpacity
+          style={styles.qtyBtn}
+          onPress={() => updateCantidad(item.id, 1)}
+          activeOpacity={0.7}
+        >
           <Ionicons name="add" size={16} color={PRIMARY} />
         </TouchableOpacity>
       </View>
@@ -377,7 +606,7 @@ export default function CarritoScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header mostrarVaciar={false} />
+        {renderHeader(false)}
         <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 40 }} />
       </SafeAreaView>
     );
@@ -386,7 +615,7 @@ export default function CarritoScreen() {
   if (items.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header mostrarVaciar={false} />
+        {renderHeader(false)}
         <View style={styles.empty}>
           <View style={styles.emptyCircle}>
             <Ionicons name="cart-outline" size={56} color="#cfcfd4" />
@@ -401,15 +630,18 @@ export default function CarritoScreen() {
   const horarios = generarHorarios(diaRetiro);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Header mostrarVaciar={true} />
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {renderHeader(!pedidoPendienteId)}
 
       <FlatList
         data={items}
-        keyExtractor={(i) => i.id}
+        keyExtractor={(i) => String(i.id)}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 290 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingBottom: 300 + bottomPad,
+        }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListFooterComponent={
           <View>
@@ -423,18 +655,24 @@ export default function CarritoScreen() {
                     color={descuento.monto > 0 ? '#1B6B3A' : '#B45309'}
                   />
                 </View>
+
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cuponTitulo}>
                     {descuento.monto > 0 ? 'Cupón aplicado' : 'Cupón sin aplicar'}
                   </Text>
+
                   <Text style={styles.cuponTexto}>{etiquetaCupon}</Text>
+
                   {descuento.monto === 0 && !!motivoTexto && (
                     <Text style={styles.cuponMotivo}>{motivoTexto}</Text>
                   )}
                 </View>
-                <TouchableOpacity onPress={quitarCupon} hitSlop={10}>
-                  <Text style={styles.cuponQuitar}>Quitar</Text>
-                </TouchableOpacity>
+
+                {!pedidoPendienteId && (
+                  <TouchableOpacity onPress={quitarCupon} hitSlop={10}>
+                    <Text style={styles.cuponQuitar}>Quitar</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -444,6 +682,7 @@ export default function CarritoScreen() {
                 <View style={styles.retiroIcon}>
                   <Ionicons name="time-outline" size={18} color={PRIMARY} />
                 </View>
+
                 <View style={{ flex: 1 }}>
                   <Text style={styles.retiroTitle}>Hora de retiro</Text>
                   <Text style={styles.retiroSub}>
@@ -453,24 +692,31 @@ export default function CarritoScreen() {
                   </Text>
                 </View>
 
-                <View style={styles.diaSwitch}>
-                  {['Hoy', 'Mañana'].map((label, idx) => (
-                    <TouchableOpacity
-                      key={label}
-                      style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
-                      onPress={() => { setDiaRetiro(idx); setHoraRetiro(null); }}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                {!pedidoPendienteId && (
+                  <View style={styles.diaSwitch}>
+                    {['Hoy', 'Mañana'].map((label, idx) => (
+                      <TouchableOpacity
+                        key={label}
+                        style={[styles.diaBtn, diaRetiro === idx && styles.diaBtnActive]}
+                        onPress={() => {
+                          setDiaRetiro(idx);
+                          setHoraRetiro(null);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.diaText, diaRetiro === idx && styles.diaTextActive]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
 
               {horarios.length === 0 ? (
-                <Text style={styles.sinHorarios}>Ya no hay horarios hoy. Elige "Mañana".</Text>
+                <Text style={styles.sinHorarios}>
+                  Ya no hay horarios hoy. Elige "Mañana".
+                </Text>
               ) : (
                 <ScrollView
                   horizontal
@@ -479,9 +725,11 @@ export default function CarritoScreen() {
                 >
                   {horarios.map((d) => {
                     const activo = horaRetiro?.getTime() === d.getTime();
+
                     return (
                       <TouchableOpacity
                         key={d.getTime()}
+                        disabled={!!pedidoPendienteId}
                         style={[styles.slot, activo && styles.slotActive]}
                         onPress={() => setHoraRetiro(d)}
                         activeOpacity={0.8}
@@ -495,15 +743,78 @@ export default function CarritoScreen() {
                 </ScrollView>
               )}
             </View>
+
+            {/* Selección de medio de pago */}
+            {pedidoPendienteId && (
+              <View style={styles.paymentBox}>
+                <Text style={styles.paymentTitle}>Elige cómo pagar</Text>
+
+                <Text style={styles.paymentDescription}>
+                  Tu pedido ya está creado. Puedes usar tu tarjeta Oneclick inscrita
+                  o continuar con Webpay Plus. No se creará otro pedido.
+                </Text>
+
+                {/* Pago Oneclick Mall */}
+                <OneclickPaymentSection
+                  pedidoId={pedidoPendienteId}
+                  onBusyChange={setOneclickBusy}
+                  onPaymentFailed={validarPedidoPendiente}
+                  onPaymentSuccess={() =>
+                    router.replace({
+                      pathname: '/order-status',
+                      params: { pedido: pedidoPendienteId },
+                    })
+                  }
+                />
+
+                {/* Pago tradicional Webpay Plus */}
+                <TouchableOpacity
+                  style={[styles.btnWebpay, (confirmando || oneclickBusy) && styles.btnBloqueado]}
+                  onPress={pagarWebpay}
+                  disabled={confirmando || oneclickBusy}
+                  activeOpacity={0.85}
+                >
+                  {confirmando ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.btnConfirmarText}>
+                      Pagar con Webpay Plus
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                {/* Cancelar el pedido para cambiar la hora o los productos */}
+                <TouchableOpacity
+                  onPress={cancelarPedidoPendiente}
+                  disabled={cancelando || oneclickBusy}
+                  style={[styles.btnCancelarPedido, oneclickBusy && styles.btnBloqueado]}
+                  activeOpacity={0.7}
+                >
+                  {cancelando ? (
+                    <ActivityIndicator color={PRIMARY} />
+                  ) : (
+                    <Text style={styles.textCancelarPedido}>
+                      Cancelar pedido y cambiar hora o productos
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.pedidoId}>
+                  Pedido pendiente: #{String(pedidoPendienteId).slice(0, 8).toUpperCase()}
+                </Text>
+              </View>
+            )}
           </View>
         }
       />
 
-      <View style={styles.summary}>
+      {/* Resumen inferior */}
+      <View style={[styles.summary, { paddingBottom: bottomPad }]}>
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Subtotal</Text>
           <Text style={styles.summaryValue}>{formatCLP(subtotal)}</Text>
         </View>
+
         {descuento.monto > 0 && (
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Descuento cupón</Text>
@@ -512,31 +823,45 @@ export default function CarritoScreen() {
             </Text>
           </View>
         )}
+
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>Punto Retiro</Text>
           <Text style={[styles.summaryValue, { color: '#1B6B3A' }]}>
             {horaRetiro ? `${formatHora(horaRetiro)} hrs` : 'Gratis'}
           </Text>
         </View>
+
         <View style={[styles.summaryRow, styles.totalRow]}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>{formatCLP(total)}</Text>
         </View>
 
-        <TouchableOpacity
-          style={[styles.btnConfirmar, !horaRetiro && styles.btnConfirmarDisabled]}
-          onPress={confirmarPedido}
-          disabled={confirmando}
-          activeOpacity={0.85}
-        >
-          {confirmando ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.btnConfirmarText}>
-              {horaRetiro ? 'Pagar con Webpay' : 'Elige hora de retiro'}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {/* Crear pedido una sola vez */}
+        {!pedidoPendienteId && (
+          <TouchableOpacity
+            style={[
+              styles.btnConfirmar,
+              (!horaRetiro || creandoPedido) && styles.btnConfirmarDisabled,
+            ]}
+            onPress={confirmarPedido}
+            disabled={!horaRetiro || creandoPedido}
+            activeOpacity={0.85}
+          >
+            {creandoPedido ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.btnConfirmarText}>
+                {horaRetiro ? 'Crear pedido y elegir pago' : 'Elige hora de retiro'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {!!pedidoPendienteId && (
+          <Text style={styles.pedidoCreado}>
+            Pedido creado. Selecciona un medio de pago arriba.
+          </Text>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -544,6 +869,8 @@ export default function CarritoScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
+
+  btnBloqueado: { opacity: 0.5 },
 
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -569,6 +896,9 @@ const styles = StyleSheet.create({
     boxShadow: '0px 3px 12px rgba(0,0,0,0.05)',
   },
   img: { width: 72, height: 72, borderRadius: 16, backgroundColor: '#fff' },
+  imgPlaceholder: {
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#f3f3f5',
+  },
   info: { flex: 1, paddingHorizontal: 12 },
   nombre: { fontSize: 14, fontWeight: '600', color: INK, marginBottom: 6, lineHeight: 19 },
   precio: { fontSize: 16, fontWeight: '800', color: PRIMARY, letterSpacing: -0.3 },
@@ -631,6 +961,43 @@ const styles = StyleSheet.create({
   slotTextActive: { color: '#fff' },
   sinHorarios: { fontSize: 13, color: '#999', paddingHorizontal: 14 },
 
+  // Selección de medios de pago
+  paymentBox: {
+    marginTop: 16,
+    gap: 12,
+  },
+  paymentTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: INK,
+  },
+  paymentDescription: {
+    fontSize: 13,
+    color: '#666',
+    lineHeight: 19,
+  },
+  btnWebpay: {
+    backgroundColor: '#173B73',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  btnCancelarPedido: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  textCancelarPedido: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: PRIMARY,
+  },
+  pedidoId: {
+    fontSize: 11,
+    color: '#999',
+    textAlign: 'center',
+  },
+
   // Resumen
   summary: {
     position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff',
@@ -638,18 +1005,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24, paddingTop: 20, paddingBottom: 32,
     boxShadow: '0px -4px 16px rgba(0,0,0,0.08)',
   },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  summaryRow: {
+    flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8,
+  },
   summaryLabel: { fontSize: 14, color: '#888' },
   summaryValue: { fontSize: 14, fontWeight: '600', color: INK },
-  totalRow: { borderTopWidth: 1, borderTopColor: '#f0f0f2', paddingTop: 12, marginTop: 4, marginBottom: 14 },
+  totalRow: {
+    borderTopWidth: 1, borderTopColor: '#f0f0f2',
+    paddingTop: 12, marginTop: 4, marginBottom: 14,
+  },
   totalLabel: { fontSize: 17, fontWeight: '800', color: INK },
-  totalValue: { fontSize: 22, fontWeight: '900', color: PRIMARY, letterSpacing: -0.5 },
+  totalValue: {
+    fontSize: 22, fontWeight: '900', color: PRIMARY, letterSpacing: -0.5,
+  },
   btnConfirmar: {
-    backgroundColor: PRIMARY, borderRadius: 18, paddingVertical: 16, alignItems: 'center',
+    backgroundColor: PRIMARY, borderRadius: 18, paddingVertical: 16,
+    alignItems: 'center',
     boxShadow: '0px 4px 12px rgba(194,24,7,0.3)',
   },
-  btnConfirmarDisabled: { backgroundColor: '#d9a09a', boxShadow: 'none' },
-  btnConfirmarText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  btnConfirmarDisabled: {
+    backgroundColor: '#d9a09a',
+    boxShadow: 'none',
+  },
+  btnConfirmarText: {
+    fontSize: 16, fontWeight: '800', color: '#fff',
+  },
+  pedidoCreado: {
+    textAlign: 'center',
+    color: '#1B6B3A',
+    fontWeight: '700',
+    fontSize: 12,
+  },
 
   // Vacío
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },

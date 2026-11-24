@@ -43,6 +43,9 @@ const resuelto = (i) => completo(i) || (esFaltante(i) && !sustPendiente(i));
 
 const totalEntregar = (p) => Number(p.total || 0) - Number(p.reembolso_pendiente || 0);
 
+// Nombre del cliente (si el picker no puede leerlo, se muestra "Cliente")
+const nombreCliente = (pedido) => pedido?.cliente?.nombre?.trim() || 'Cliente';
+
 export default function PickerHome() {
   const router = useRouter();
   const [nombre, setNombre] = useState('Picker');
@@ -79,11 +82,13 @@ export default function PickerHome() {
         fecha_asignacion,
         pedidos (
           id,
+          id_cliente,
           total,
           reembolso_pendiente,
           direccion_entrega,
           hora_retiro,
           created_at,
+          cliente:perfiles!id_cliente ( nombre ),
           pedido_items (
             id,
             cantidad,
@@ -149,11 +154,16 @@ export default function PickerHome() {
         activeOpacity={0.85}
       >
         <View style={styles.cardHeader}>
-          <View>
-            <Text style={styles.pedidoId}>Pedido</Text>
-            <Text style={styles.clienteName}>
-              #{String(pedido.id).slice(0, 8).toUpperCase()}
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.pedidoId}>
+              Pedido #{String(pedido.id).slice(0, 8).toUpperCase()}
             </Text>
+            <View style={styles.clienteRow}>
+              <Ionicons name="person-circle-outline" size={20} color="#1a1a1a" />
+              <Text style={styles.clienteName} numberOfLines={1}>
+                {nombreCliente(pedido)}
+              </Text>
+            </View>
           </View>
           <View style={[styles.estadoBadge, { backgroundColor: estado.bg }]}>
             <Text style={[styles.estadoText, { color: estado.color }]}>{estado.label}</Text>
@@ -310,8 +320,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'flex-start', marginBottom: 14,
   },
-  pedidoId: { fontSize: 12, color: '#888', fontWeight: '600' },
-  clienteName: { fontSize: 18, fontWeight: '800', color: '#1a1a1a', marginTop: 2 },
+  pedidoId: { fontSize: 12, color: '#888', fontWeight: '700' },
+  clienteRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+  clienteName: { flexShrink: 1, fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
   estadoBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   estadoText: { fontSize: 12, fontWeight: '700' },
   cardInfo: { gap: 6, marginBottom: 16 },

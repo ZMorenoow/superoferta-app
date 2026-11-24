@@ -58,7 +58,8 @@
         {
           "color": "#C21807"
         }
-      ]
+      ],
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,

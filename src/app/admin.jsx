@@ -3,18 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
@@ -53,6 +53,8 @@ const confirmar = (titulo, mensaje, textoOk, onOk) => {
     ]);
   }
 };
+
+const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const ETIQUETA_ESTADO = {
   pagado: 'Pagado',
@@ -104,10 +106,12 @@ export default function AdminScreen() {
   const router = useRouter();
   const scrollRef = useRef(null);
   const limpiarTimer = useRef(null);
+  const montado = useRef(true);
 
   useEffect(() => () => clearTimeout(limpiarTimer.current), []);
 
   const [esAdmin, setEsAdmin] = useState(false);
+  const [sinConexion, setSinConexion] = useState(false);
   const [sucursalId, setSucursalId] = useState(null);
   const [tab, setTab] = useState('resumen');
   const [dias, setDias] = useState(1);
@@ -126,27 +130,76 @@ export default function AdminScreen() {
   const [pickers, setPickers] = useState([]);
   const [sinAsignar, setSinAsignar] = useState([]);
 
-  // Solo entra quien tenga rol admin
-  useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace('/login');
-        return;
+  // Verifica que sea admin SIN sacarlo por fallos temporales (red lenta, token renovándose, etc.).
+  // Solo lo saca si la base responde bien y dice que su rol NO es admin, o si no hay sesión.
+  const verificarAdmin = useCallback(async () => {
+    setSinConexion(false);
+
+    // 1) Sesión guardada en el teléfono (no depende de internet)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!montado.current) return;
+    if (!session) {
+      router.replace('/login');
+      return;
+    }
+
+    // 2) Rol guardado al iniciar sesión: entra de inmediato
+    let entroPorCache = false;
+    try {
+      const rolGuardado = await AsyncStorage.getItem('@rol');
+      if (rolGuardado === 'admin' && montado.current) {
+        entroPorCache = true;
+        setEsAdmin(true);
       }
-      const { data: perfil } = await supabase
+    } catch {}
+
+    // 3) Confirmar con la base, con reintentos
+    for (let intento = 0; intento < 3; intento++) {
+      const { data: perfil, error: e } = await supabase
         .from('perfiles')
         .select('rol, id_sucursal_preferida')
-        .eq('id', user.id)
-        .single();
-      if (perfil?.rol !== 'admin') {
-        router.replace('/(tabs)');
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!montado.current) return;
+
+      if (!e && perfil) {
+        if (perfil.rol !== 'admin') {
+          try {
+            await AsyncStorage.setItem('@rol', perfil.rol);
+          } catch {}
+          router.replace('/(tabs)');
+          return;
+        }
+        try {
+          await AsyncStorage.setItem('@rol', 'admin');
+        } catch {}
+        setSucursalId(perfil.id_sucursal_preferida);
+        setEsAdmin(true);
         return;
       }
-      setSucursalId(perfil.id_sucursal_preferida);
-      setEsAdmin(true);
-    })();
-  }, []);
+
+      await esperar(1500 * (intento + 1));
+      if (!montado.current) return;
+    }
+
+    // Si no se pudo confirmar pero ya entró por el rol guardado, se queda (no lo sacamos)
+    if (!entroPorCache) setSinConexion(true);
+  }, [router]);
+
+  useEffect(() => {
+    montado.current = true;
+    verificarAdmin();
+
+    // Solo cerrar sesión explícita lo manda al login; renovar el token no hace nada
+    const { data: sub } = supabase.auth.onAuthStateChange((evento) => {
+      if (evento === 'SIGNED_OUT' && montado.current) router.replace('/login');
+    });
+
+    return () => {
+      montado.current = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [verificarAdmin]);
 
   const cargar = useCallback(async () => {
     if (!esAdmin) return;
@@ -275,6 +328,20 @@ export default function AdminScreen() {
   };
 
   if (!esAdmin) {
+    if (sinConexion) {
+      return (
+        <SafeAreaView style={s.container}>
+          <View style={s.sinConexion}>
+            <Ionicons name="cloud-offline-outline" size={48} color="#bbb" />
+            <Text style={s.sinConexionTitulo}>No se pudo verificar tu cuenta</Text>
+            <Text style={s.nota}>Revisa tu conexión e intenta de nuevo.</Text>
+            <TouchableOpacity style={s.btnVerificar} onPress={verificarAdmin}>
+              <Text style={s.btnTexto}>Reintentar</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={s.container}>
         <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 80 }} />
@@ -638,6 +705,9 @@ const s = StyleSheet.create({
   tabActiva: { backgroundColor: PRIMARY },
   tabTexto: { fontSize: 13, fontWeight: '700', color: '#666' },
 
+  sinConexion: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 28 },
+  sinConexionTitulo: { fontSize: 17, fontWeight: '800', color: '#1a1a1a', textAlign: 'center' },
+
   chips: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   chip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
@@ -684,7 +754,7 @@ const s = StyleSheet.create({
     textAlign: 'center', color: '#1a1a1a',
   },
   btnVerificar: {
-    backgroundColor: PRIMARY, borderRadius: 12, paddingHorizontal: 18,
+    backgroundColor: PRIMARY, borderRadius: 12, paddingHorizontal: 18, paddingVertical: 12,
     alignItems: 'center', justifyContent: 'center',
   },
   btnTexto: { color: '#fff', fontWeight: '800', fontSize: 15 },

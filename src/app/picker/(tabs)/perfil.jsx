@@ -221,8 +221,6 @@ export default function PickerPerfilScreen() {
 
         <Ionicons name="chevron-forward" size={18} color="#D7A19B" />
       </TouchableOpacity>
-
-      <Text style={styles.version}>Versión 1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );

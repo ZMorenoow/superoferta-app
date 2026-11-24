@@ -1,7 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  Animated,
+  Easing,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PRIMARY = '#C21807';
 const VERDE = '#1B6B3A';
@@ -16,6 +25,15 @@ const MASCARA = 'rgba(0,0,0,0.65)';
 
 export default function ScannerOverlay({ completados, total, feedback, onClose }) {
   const linea = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+
+  // Dentro de un Modal de Android los insets a veces llegan en 0 y los botones
+  // quedan bajo la barra de estado o la barra de navegación. Se aplican mínimos.
+  const topPad = Math.max(
+    insets.top,
+    Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0
+  );
+  const bottomPad = Math.max(insets.bottom, Platform.OS === 'android' ? 40 : 0) + 16;
 
   useEffect(() => {
     const anim = Animated.loop(
@@ -32,13 +50,11 @@ export default function ScannerOverlay({ completados, total, feedback, onClose }
     return () => anim.stop();
   }, [linea]);
 
-
   const colorMarco = !feedback ? '#fff' : feedback.ok ? VERDE_BRILLO : ROJO_BRILLO;
   const translateY = linea.interpolate({ inputRange: [0, 1], outputRange: [10, MARCO_H - 12] });
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <View style={styles.mascara} />
         <View style={styles.filaCentro}>
@@ -57,8 +73,11 @@ export default function ScannerOverlay({ completados, total, feedback, onClose }
         </View>
       </View>
 
-      {/* Controles */}
-      <SafeAreaView style={styles.capa} pointerEvents="box-none">
+      {/* Controles (con márgenes manuales en vez de SafeAreaView) */}
+      <View
+        style={[styles.capa, { paddingTop: topPad, paddingBottom: bottomPad }]}
+        pointerEvents="box-none"
+      >
         <View style={styles.top}>
           <View style={styles.pastilla}>
             <Ionicons name="barcode-outline" size={18} color="#fff" />
@@ -66,8 +85,13 @@ export default function ScannerOverlay({ completados, total, feedback, onClose }
               {completados} de {total} listos
             </Text>
           </View>
-          <TouchableOpacity style={styles.cerrar} onPress={onClose}>
-            <Ionicons name="close" size={24} color="#fff" />
+          <TouchableOpacity
+            style={styles.cerrar}
+            onPress={onClose}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={26} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -84,11 +108,11 @@ export default function ScannerOverlay({ completados, total, feedback, onClose }
               </View>
             )}
           </View>
-          <TouchableOpacity style={styles.listo} onPress={onClose}>
+          <TouchableOpacity style={styles.listo} onPress={onClose} activeOpacity={0.85}>
             <Text style={styles.listoTexto}>Listo</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     </View>
   );
 }
@@ -117,20 +141,22 @@ const styles = StyleSheet.create({
   capa: { flex: 1, justifyContent: 'space-between' },
   top: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingTop: 8,
+    paddingHorizontal: 20, paddingTop: 12,
   },
   pastilla: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 9,
+    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 22,
+    paddingHorizontal: 14, paddingVertical: 10,
   },
   pastillaTexto: { color: '#fff', fontSize: 14, fontWeight: '800' },
   cerrar: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center',
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.6)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  bottom: { padding: 20, gap: 12 },
+  bottom: { paddingHorizontal: 20, gap: 12 },
   feedbackCaja: { minHeight: 52, justifyContent: 'center' },
   feedback: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

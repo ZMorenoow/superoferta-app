@@ -23,6 +23,7 @@ const MENU_ITEMS = [
   { icon: 'person-outline', label: 'Datos personales', route: '/datos-personales' },
   { icon: 'lock-closed-outline', label: 'Cambiar contraseña', route: '/cambiar-password' },
   { icon: 'receipt-outline', label: 'Mis pedidos', route: '/mis_pedidos' },
+  { icon: 'card-outline', label: 'Mi tarjeta', route: '/mi-tarjeta' },
   { icon: 'location-outline', label: 'Mis direcciones', route: '/mis-direcciones' },
   { icon: 'notifications-outline', label: 'Notificaciones', route: '/notificaciones' },
   { icon: 'help-circle-outline', label: 'Ayuda', route: '/ayuda' },
