@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { supabase } from '../utils/supabase';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 const RETURN_PATH = '/functions/v1/oneclick-inscription-return';
 
 const escapeHtml = (value) => String(value ?? '')

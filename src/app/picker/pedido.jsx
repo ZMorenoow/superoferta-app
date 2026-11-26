@@ -20,7 +20,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import ScannerOverlay from '../../components/ScannerOverlay';
 import { supabase } from '../../utils/supabase';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 const VERDE = '#1B6B3A';
 
 const formatCLP = (n) => `$${Number(n || 0).toLocaleString('es-CL')}`;

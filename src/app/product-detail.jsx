@@ -10,7 +10,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import CustomAlert from '../components/CustomAlert';
 import { supabase } from '../utils/supabase';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 const BG = '#F5F5F7';
 const INK = '#1a1a1a';
 
