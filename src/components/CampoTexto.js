@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 
 export default function CampoTexto({ icono, label, secure, style, onFocus, onBlur, ...props }) {
   const [foco, setFoco] = useState(false);

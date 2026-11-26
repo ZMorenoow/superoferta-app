@@ -9,7 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import CampoTexto from '../components/CampoTexto';
 import { supabase } from '../utils/supabase';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 
 export default function MisDireccionesScreen() {
   const router = useRouter();

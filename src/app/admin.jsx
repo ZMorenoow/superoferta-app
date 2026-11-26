@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../utils/supabase';
 import { useRealtime } from '../utils/useRealtime';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 const VERDE = '#1B6B3A';
 const AMARILLO = '#B45309';
 const PEDIDOS_POR_PICKER_HORA = 5; // referencia para el tope sugerido

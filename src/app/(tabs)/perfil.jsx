@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CustomAlert from '../../components/CustomAlert';
 import { useTabBar } from '../../context/TabBarContext';
 import { supabase } from '../../utils/supabase';
 
@@ -38,6 +39,26 @@ export default function PerfilScreen() {
   const [loading, setLoading] = useState(true);
   const [pedidosActivos, setPedidosActivos] = useState(0);
   const [notifSinLeer, setNotifSinLeer] = useState(0);
+  const [alertConfig, setAlertConfig] = useState(null);
+  const [alertVisible, setAlertVisible] = useState(false);
+
+  // Se conserva el contenido al cerrar para que el texto no cambie durante la animación de salida.
+  const cerrarAlert = () => setAlertVisible(false);
+
+  const mostrarAlertLogin = (message) => {
+    setAlertConfig({
+      icon: 'lock-closed',
+      iconColor: PRIMARY,
+      title: 'Inicia sesión',
+      message,
+      buttonText: 'Ir a inicio de sesión',
+      onPress: () => {
+        cerrarAlert();
+        router.replace('/login');
+      },
+    });
+    setAlertVisible(true);
+  };
 
   // Contadores que se muestran al lado de cada opción del menú (por ruta)
   const BADGES = {
@@ -77,7 +98,8 @@ export default function PerfilScreen() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      router.replace('/login');
+      setLoading(false);
+      mostrarAlertLogin('Ingresa o Regístrate para ver tu perfil');
       return;
     }
 
@@ -212,6 +234,16 @@ export default function PerfilScreen() {
           <Text style={styles.logoutText}>Cerrar sesión</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <CustomAlert
+        visible={alertVisible}
+        icon={alertConfig?.icon}
+        iconColor={alertConfig?.iconColor}
+        title={alertConfig?.title}
+        message={alertConfig?.message}
+        buttonText={alertConfig?.buttonText}
+        onPress={alertConfig?.onPress}
+      />
     </View>
   );
 }

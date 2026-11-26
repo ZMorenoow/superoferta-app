@@ -4,7 +4,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -19,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CategoryChips from '../components/CategoryChips';
+import CustomAlert from '../components/CustomAlert';
 import { useTabBar } from '../context/TabBarContext';
 import { agregarAlCarrito } from '../utils/agregarAlCarrito';
 import { MOCK_BANNERS } from '../utils/api';
@@ -27,7 +27,7 @@ import { supabase } from '../utils/supabase';
 import { useBanners } from '../utils/useBanners';
 
 const { width } = Dimensions.get('window');
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 const BG = '#F5F5F7';
 const INK = '#1a1a1a';
 
@@ -151,15 +151,21 @@ function BannerSlider() {
     </View>
   );
 }
-
-const StaticHeader = React.memo(({ router, cartCount, total }) => (
+const obtenerSaludo = () => {
+  const hora = new Date().getHours();
+  if (hora >= 5 && hora < 12) return 'Buenos días ☀️';
+  if (hora >= 12 && hora < 20) return 'Buenas tardes 👋';
+  return 'Buenas noches 🌙';
+};
+const StaticHeader = React.memo(({ onCartPress, cartCount, total }) => (
   <View>
     <View style={styles.header}>
-      <View>
-        <Text style={styles.greeting}>Hola 👋</Text>
+      <View style={styles.headerTextBox}>
+        <Text style={styles.greeting}>{obtenerSaludo()}</Text>
         <Text style={styles.headerTitle}>¿Qué necesitas hoy?</Text>
       </View>
-      <TouchableOpacity style={styles.cartBtn} onPress={() => router.push('/cart')} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.cartBtn} onPress={onCartPress} activeOpacity={0.8}>
+
         <Ionicons name="cart-outline" size={24} color={PRIMARY} />
         {cartCount > 0 && (
           <View style={styles.cartBadge}>
@@ -206,6 +212,30 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [cartCount, setCartCount] = useState(0);
+  const [alertConfig, setAlertConfig] = useState(null);
+  const [alertVisible, setAlertVisible] = useState(false);
+
+  // Se conserva el contenido al cerrar: así, durante la animación de salida,
+  // el modal sigue mostrando su texto y no cae a textos por defecto.
+  const mostrarAlert = (config) => {
+    setAlertConfig(config);
+    setAlertVisible(true);
+  };
+  const cerrarAlert = () => setAlertVisible(false);
+
+  // Modal de "Inicia sesión" reutilizable (carrito, agregar, detalle de producto)
+  const mostrarAlertLogin = (message) =>
+    mostrarAlert({
+      icon: 'lock-closed',
+      iconColor: PRIMARY,
+      title: 'Inicia sesión',
+      message,
+      buttonText: 'Ir a inicio de sesión',
+      onPress: () => {
+        cerrarAlert();
+        router.push('/login');
+      },
+    });
   const { handleScroll, showTabBar } = useTabBar();
 
   const cargarCartCount = useCallback(async () => {
@@ -325,27 +355,63 @@ export default function HomeScreen() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      router.push('/login');
+      mostrarAlertLogin('Ingresa o Regístrate para ver los detalles del producto');
       return;
     }
 
     router.push({ pathname: '/product-detail', params: { id: item.id } });
   }, [router]);
 
+  // Botón del carrito del encabezado
+  const handleCartPress = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      mostrarAlertLogin('Ingresa o Regístrate para ver tu carrito');
+      return;
+    }
+
+    router.push('/cart');
+  }, [router]);
+
   const handleAddToCart = useCallback(async (item) => {
+    // 1) Sin sesión: solo el modal de login, sin intentar agregar nada.
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      mostrarAlertLogin('Inicia sesión antes de agregar productos al carrito');
+      return;
+    }
+
+    // 2) Con sesión: agregar y mostrar éxito o error.
     const resultado = await agregarAlCarrito(item);
 
     if (resultado === 'login') {
+      // Por si la sesión venció justo entre la comprobación y el agregado.
       router.push('/login');
       return;
     }
     if (resultado === 'error') {
-      Alert.alert('Error', 'No se pudo agregar el producto al carrito');
+      mostrarAlert({
+        icon: 'close-circle',
+        iconColor: PRIMARY,
+        title: 'Error',
+        message: 'No se pudo agregar el producto al carrito',
+        buttonText: 'Entendido',
+        onPress: () => cerrarAlert(),
+      });
       return;
     }
 
     cargarCartCount();
-    Alert.alert('¡Listo!', 'Se ha agregado correctamente el producto al carrito');
+    mostrarAlert({
+      icon: 'checkmark-circle',
+      iconColor: '#1B6B3A',
+      title: '¡Listo!',
+      message: 'Se ha agregado correctamente al carrito',
+      buttonText: 'Continuar',
+      onPress: () => cerrarAlert(),
+    });
   }, [router, cargarCartCount]);
 
   const renderProduct = useCallback(({ item }) => {
@@ -441,7 +507,7 @@ export default function HomeScreen() {
           contentContainerStyle={styles.productsList}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <StaticHeader router={router} cartCount={cartCount} total={products.length} />
+            <StaticHeader onCartPress={handleCartPress} cartCount={cartCount} total={products.length} />
           }
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
@@ -462,6 +528,16 @@ export default function HomeScreen() {
           }
         />
       )}
+
+      <CustomAlert
+        visible={alertVisible}
+        icon={alertConfig?.icon}
+        iconColor={alertConfig?.iconColor}
+        title={alertConfig?.title}
+        message={alertConfig?.message}
+        buttonText={alertConfig?.buttonText}
+        onPress={alertConfig?.onPress}
+      />
     </SafeAreaView>
   );
 }
@@ -469,14 +545,26 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BG },
 
-  // Cabecera
+// Cabecera
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingHorizontal: 20,
-    paddingTop: 4, paddingBottom: 16,
+    paddingTop: 8, paddingBottom: 20,
   },
-  greeting: { fontSize: 13, color: '#8a8a8a', fontWeight: '500' },
-  headerTitle: { fontSize: 24, color: INK, fontWeight: '800', letterSpacing: -0.4 },
+  headerTextBox: { flex: 1, paddingRight: 12 },
+  greeting: {
+    alignSelf: 'flex-start',
+    fontSize: 13, fontWeight: '700', color: PRIMARY,
+    backgroundColor: 'rgba(194,24,7,0.08)',
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 20, overflow: 'hidden',
+    letterSpacing: 0.4,
+    marginBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 26, color: INK, fontWeight: '800',
+    letterSpacing: -0.5, lineHeight: 32,
+  },
   cartBtn: {
     width: 46, height: 46, borderRadius: 23, backgroundColor: '#fff',
     alignItems: 'center', justifyContent: 'center',

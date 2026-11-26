@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs, useRouter } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import CustomAlert from '../../components/CustomAlert';
 import { TabBarProvider, useTabBar } from '../../context/TabBarContext';
 import { estaLogueado } from '../../utils/estaLogueado';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 const BASE_BOTTOM = 24;
 
 const TABS = [
@@ -18,14 +19,41 @@ const TABS = [
 ];
 
 
-const PROTECTED_TABS = ['categorias', 'cupones', 'ofertas'];
+const PROTECTED_TABS = ['categorias', 'cupones', 'ofertas', 'perfil'];
+
+// Mensaje del modal de login según la pestaña que se intentó abrir
+const MENSAJES_LOGIN = {
+  categorias: 'Ingresa o Regístrate para explorar las categorías',
+  cupones: 'Ingresa o Regístrate para ver tus cupones',
+  ofertas: 'Ingresa o Regístrate para ver las ofertas',
+  perfil: 'Ingresa o Regístrate para ver tu perfil',
+};
 
 function AnimatedTabBar({ state }) {
   const animations = useRef(TABS.map(() => new Animated.Value(1))).current;
   const { translateY, opacity, showTabBar } = useTabBar();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [alertConfig, setAlertConfig] = useState(null);
+  const [alertVisible, setAlertVisible] = useState(false);
 
+  // Se conserva el contenido al cerrar para que no cambie el texto durante la animación de salida.
+  const cerrarAlert = () => setAlertVisible(false);
+
+  const mostrarAlertLogin = (routeName) => {
+    setAlertConfig({
+      icon: 'lock-closed',
+      iconColor: PRIMARY,
+      title: 'Inicia sesión',
+      message: MENSAJES_LOGIN[routeName] ?? 'Inicia sesión para continuar',
+      buttonText: 'Ir a inicio de sesión',
+      onPress: () => {
+        cerrarAlert();
+        router.push('/login');
+      },
+    });
+    setAlertVisible(true);
+  };
 
   useEffect(() => {
     showTabBar();
@@ -49,7 +77,7 @@ function AnimatedTabBar({ state }) {
     if (isFocused) return;
 
     if (PROTECTED_TABS.includes(routeName) && !(await estaLogueado())) {
-      router.push('/login');
+      mostrarAlertLogin(routeName);
       return;
     }
 
@@ -57,53 +85,65 @@ function AnimatedTabBar({ state }) {
   };
 
   return (
-    <Animated.View
-      style={[
-        styles.tabBar,
-        {
-          bottom: BASE_BOTTOM + insets.bottom,
-          opacity,                        
-          transform: [{ translateY }],
-        },
-      ]}
-    >
-      {state.routes.map((route) => {
-        const tab = TABS.find((t) => t.name === route.name);
-        if (!tab) return null;
+    <>
+      <Animated.View
+        style={[
+          styles.tabBar,
+          {
+            bottom: BASE_BOTTOM + insets.bottom,
+            opacity,
+            transform: [{ translateY }],
+          },
+        ]}
+      >
+        {state.routes.map((route) => {
+          const tab = TABS.find((t) => t.name === route.name);
+          if (!tab) return null;
 
-        const tabIndex = TABS.indexOf(tab);
-        const isFocused = state.routes[state.index]?.name === route.name;
+          const tabIndex = TABS.indexOf(tab);
+          const isFocused = state.routes[state.index]?.name === route.name;
 
-        return (
-          <TouchableOpacity
-            key={route.key}
-            style={styles.tabItem}
-            onPress={() => handlePress(tabIndex, route.name, isFocused)}
-            activeOpacity={0.8}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-          >
-            <Animated.View
-              style={[
-                styles.pill,
-                isFocused && styles.pillActive,
-                { transform: [{ scale: animations[tabIndex] }] },
-              ]}
+          return (
+            <TouchableOpacity
+              key={route.key}
+              style={styles.tabItem}
+              onPress={() => handlePress(tabIndex, route.name, isFocused)}
+              activeOpacity={0.8}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Ionicons
-                name={isFocused ? tab.iconActive : tab.icon}
-                size={22}
-                color={isFocused ? '#fff' : '#8a8a8a'}
-              />
-              {isFocused && (
-                <Text style={styles.label} numberOfLines={1}>
-                  {tab.title}
-                </Text>
-              )}
-            </Animated.View>
-          </TouchableOpacity>
-        );
-      })}
-    </Animated.View>
+              <Animated.View
+                style={[
+                  styles.pill,
+                  isFocused && styles.pillActive,
+                  { transform: [{ scale: animations[tabIndex] }] },
+                ]}
+              >
+                <Ionicons
+                  name={isFocused ? tab.iconActive : tab.icon}
+                  size={22}
+                  color={isFocused ? '#fff' : '#8a8a8a'}
+                />
+                {isFocused && (
+                  <Text style={styles.label} numberOfLines={1}>
+                    {tab.title}
+                  </Text>
+                )}
+              </Animated.View>
+            </TouchableOpacity>
+          );
+        })}
+      </Animated.View>
+
+      <CustomAlert
+        visible={alertVisible}
+        icon={alertConfig?.icon}
+        iconColor={alertConfig?.iconColor}
+        title={alertConfig?.title}
+        message={alertConfig?.message}
+        buttonText={alertConfig?.buttonText}
+        onPress={alertConfig?.onPress}
+      />
+    </>
   );
 }
 

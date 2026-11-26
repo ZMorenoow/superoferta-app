@@ -1,16 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import OneclickPaymentSection from '../components/OneclickPaymentSection';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 
 export default function MiTarjetaScreen() {
   const router = useRouter();

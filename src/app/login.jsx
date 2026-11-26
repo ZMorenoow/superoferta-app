@@ -1,9 +1,10 @@
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Image,
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
@@ -18,7 +19,32 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import CampoTexto from '../components/CampoTexto';
 import { supabase } from '../utils/supabase';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
+const SECUNDARY = '#FBB03C';
+const INK = '#1a1a1a';
+// Fondos del login: cada vez que se abre la pantalla se elige uno distinto al anterior.
+const FONDOS = [
+  require('../../assets/images/fondos/fondo_comida.jpg'),
+  require('../../assets/images/fondos/fondo_congelados.jpg'),
+  require('../../assets/images/fondos/fondo_fv.jpg'),
+  require('../../assets/images/fondos/fondo_pan.jpg'),
+  require('../../assets/images/fondos/fondo_snacks.jpg'),
+];
+
+// Logo del círculo (reemplaza por tu URL)
+const LOGO_URL = 'https://pnhwofjsmqrmcdrsfpxg.supabase.co/storage/v1/object/public/banners/PNG%20de%20login%20SO-Photoroom.png';
+
+let ultimoFondo = -1;
+const elegirFondo = () => {
+  let i = Math.floor(Math.random() * FONDOS.length);
+  // evita repetir el mismo fondo dos veces seguidas
+  while (FONDOS.length > 1 && i === ultimoFondo) {
+    i = Math.floor(Math.random() * FONDOS.length);
+  }
+  ultimoFondo = i;
+  return FONDOS[i];
+};
+
 const MIN_PASSWORD = 6; // mínimo por defecto de Supabase; súbelo aquí y en el dashboard si quieres más
 
 // Pasos del modal: 'login' -> 'correo' -> 'codigo' -> 'nueva'
@@ -28,6 +54,11 @@ const TITULOS = {
   codigo: ['Revisa tu correo', 'Ingresa el código que te enviamos'],
   nueva: ['Nueva contraseña', 'Elige una contraseña que recuerdes'],
 };
+
+const PASOS_RECUPERACION = ['correo', 'codigo', 'nueva'];
+
+// A qué paso vuelve el botón de retroceso (en 'nueva' no hay vuelta: ya hay sesión temporal)
+const ATRAS = { correo: 'login', codigo: 'correo' };
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -40,6 +71,22 @@ export default function LoginScreen() {
   const [nuevaPassword, setNuevaPassword] = useState('');
   const [confirmarPassword, setConfirmarPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [mensaje, setMensaje] = useState(null); // { texto, titulo? } -> error inline
+  const [fondo] = useState(elegirFondo);
+  const [logoFalla, setLogoFalla] = useState(false);
+
+  const error = (texto, titulo) => setMensaje({ texto, titulo });
+
+  const irA = (nuevoPaso) => {
+    setMensaje(null);
+    setPaso(nuevoPaso);
+  };
+
+  // Al escribir en cualquier campo se limpia el mensaje de error
+  const cambiar = (setter) => (valor) => {
+    setter(valor);
+    if (mensaje) setMensaje(null);
+  };
 
   const limpiarCampos = () => {
     setEmail('');
@@ -47,6 +94,7 @@ export default function LoginScreen() {
     setCodigo('');
     setNuevaPassword('');
     setConfirmarPassword('');
+    setMensaje(null);
   };
 
   const cerrarModal = () => {
@@ -66,7 +114,7 @@ export default function LoginScreen() {
       .single();
 
     if (perfilError || !perfil) {
-      Alert.alert('Error', 'No se pudo cargar tu perfil');
+      error('No se pudo cargar tu perfil. Intenta de nuevo.');
       return;
     }
 
@@ -86,26 +134,27 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password) {
-      Alert.alert('Error', 'Completa correo y contraseña');
+      error('Completa tu correo y tu contraseña.');
       return;
     }
 
+    setMensaje(null);
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (error) {
-        Alert.alert('Error', 'Correo o contraseña incorrectos');
+      if (authError) {
+        error('Correo o contraseña incorrectos.');
         return;
       }
 
       await entrarConPerfil(data.user.id);
     } catch (err) {
       console.error('Error en el login', err);
-      Alert.alert('Error', 'No se pudo iniciar sesión');
+      error('No se pudo iniciar sesión. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -115,28 +164,29 @@ export default function LoginScreen() {
   const enviarCodigo = async () => {
     const correo = email.trim().toLowerCase();
     if (!correo) {
-      Alert.alert('Error', 'Ingresa tu correo');
+      error('Ingresa tu correo.');
       return;
     }
 
+    setMensaje(null);
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(correo);
-      if (error) {
-        if (error.status === 429) {
-          Alert.alert('Espera un momento', 'Ya te enviamos un código. Intenta de nuevo en unos minutos.');
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(correo);
+      if (resetError) {
+        if (resetError.status === 429) {
+          error('Ya te enviamos un código. Intenta de nuevo en unos minutos.', 'Espera un momento');
         } else {
-          console.error('Error enviando código', error);
-          Alert.alert('Error', 'No se pudo enviar el código. Intenta de nuevo.');
+          console.error('Error enviando código', resetError);
+          error('No se pudo enviar el código. Intenta de nuevo.');
         }
         return;
       }
       // Mismo mensaje exista o no la cuenta, para no revelar qué correos están registrados.
       setCodigo('');
-      setPaso('codigo');
+      irA('codigo');
     } catch (err) {
       console.error('Error enviando código', err);
-      Alert.alert('Error', 'No se pudo enviar el código. Intenta de nuevo.');
+      error('No se pudo enviar el código. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -146,25 +196,26 @@ export default function LoginScreen() {
   const verificarCodigo = async () => {
     const token = codigo.trim();
     if (!token) {
-      Alert.alert('Error', 'Ingresa el código que te llegó al correo');
+      error('Ingresa el código que te llegó al correo.');
       return;
     }
 
+    setMensaje(null);
     setLoading(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({
+      const { error: otpError } = await supabase.auth.verifyOtp({
         email: email.trim().toLowerCase(),
         token,
         type: 'recovery',
       });
-      if (error) {
-        Alert.alert('Código inválido', 'El código es incorrecto o ya venció. Pide uno nuevo.');
+      if (otpError) {
+        error('El código es incorrecto o ya venció. Pide uno nuevo.', 'Código inválido');
         return;
       }
-      setPaso('nueva');
+      irA('nueva');
     } catch (err) {
       console.error('Error verificando código', err);
-      Alert.alert('Error', 'No se pudo verificar el código');
+      error('No se pudo verificar el código. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -173,67 +224,89 @@ export default function LoginScreen() {
   // Paso 3: guardar la nueva contraseña y entrar
   const guardarPassword = async () => {
     if (nuevaPassword.length < MIN_PASSWORD) {
-      Alert.alert('Contraseña muy corta', `Debe tener al menos ${MIN_PASSWORD} caracteres`);
+      error(`Debe tener al menos ${MIN_PASSWORD} caracteres.`, 'Contraseña muy corta');
       return;
     }
     if (nuevaPassword !== confirmarPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden');
+      error('Las contraseñas no coinciden.');
       return;
     }
 
+    setMensaje(null);
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.updateUser({ password: nuevaPassword });
-      if (error) {
-        if (error.code === 'same_password') {
-          Alert.alert('Error', 'La nueva contraseña debe ser distinta a la anterior');
+      const { data, error: updateError } = await supabase.auth.updateUser({ password: nuevaPassword });
+      if (updateError) {
+        if (updateError.code === 'same_password') {
+          error('La nueva contraseña debe ser distinta a la anterior.');
         } else {
-          console.error('Error actualizando contraseña', error);
-          Alert.alert('Error', 'No se pudo actualizar la contraseña');
+          console.error('Error actualizando contraseña', updateError);
+          error('No se pudo actualizar la contraseña. Intenta de nuevo.');
         }
         return;
       }
 
-      Alert.alert('Listo', 'Tu contraseña fue actualizada');
       await entrarConPerfil(data.user.id);
     } catch (err) {
       console.error('Error actualizando contraseña', err);
-      Alert.alert('Error', 'No se pudo actualizar la contraseña');
+      error('No se pudo actualizar la contraseña. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
   };
 
   const [titulo, subtitulo] = TITULOS[paso];
+  const indicePaso = PASOS_RECUPERACION.indexOf(paso);
+  const pasoAtras = ATRAS[paso];
 
   return (
     <ImageBackground
-      source={require('../../assets/images/foto_fondo_login.png')}
+      source={fondo}
       style={styles.bg}
       resizeMode="cover"
     >
+      {/* Capa oscura para que el texto blanco se lea sobre cualquier foto */}
+      <View style={styles.scrim} pointerEvents="none" />
+
       <SafeAreaView style={styles.safe} edges={['top']}>
+        <View style={styles.hero}>
+        </View>
+
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom + 16, 40) }]}>
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>S</Text>
+            {logoFalla ? (
+              <Text style={styles.logoText}>S</Text>
+            ) : (
+              <Image
+                source={{ uri: LOGO_URL }}
+                style={styles.logoImg}
+                resizeMode="cover"
+                onError={() => setLogoFalla(true)}
+              />
+            )}
           </View>
 
           <Text style={styles.welcome}>¡Te damos la bienvenida a</Text>
-          <Text style={styles.appName}>Super Oferta!</Text>
+          <Text style={styles.welcomeSub}>
+            <Text style={styles.superO}>SuperO</Text>
+            <Text style={styles.ferta}>fertas</Text>
+            <Text style={styles.appText}> App!</Text>
+          </Text>
 
           <View style={styles.buttons}>
-            <TouchableOpacity style={styles.btnPrimary} onPress={() => setModalVisible(true)}>
+            <TouchableOpacity style={styles.btnPrimary} onPress={() => setModalVisible(true)} activeOpacity={0.85}>
               <Text style={styles.btnPrimaryText}>Iniciar sesión</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.btnSecondary}
               onPress={() => router.push('/register')}
+              activeOpacity={0.85}
             >
               <Text style={styles.btnSecondaryText}>Crear cuenta</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => router.replace('/(tabs)')}>
+            <TouchableOpacity onPress={() => router.replace('/(tabs)')} activeOpacity={0.7}>
               <Text style={styles.skipText}>Continuar sin iniciar sesión</Text>
             </TouchableOpacity>
           </View>
@@ -254,8 +327,41 @@ export default function LoginScreen() {
           <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'}>
             <View style={[styles.modalSheet, { paddingBottom: Math.max(insets.bottom + 16, 24) }]}>
               <View style={styles.handle} />
-              <Text style={styles.modalTitle}>{titulo}</Text>
-              <Text style={styles.modalSubtitle}>{subtitulo}</Text>
+
+              <View style={styles.modalHeader}>
+                {!!pasoAtras && (
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={() => irA(pasoAtras)}
+                    activeOpacity={0.7}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="chevron-back" size={20} color={INK} />
+                  </TouchableOpacity>
+                )}
+                <View style={styles.modalHeaderText}>
+                  <Text style={styles.modalTitle}>{titulo}</Text>
+                  <Text style={styles.modalSubtitle}>{subtitulo}</Text>
+                </View>
+              </View>
+
+              {indicePaso >= 0 && (
+                <View style={styles.steps}>
+                  {PASOS_RECUPERACION.map((p, i) => (
+                    <View key={p} style={[styles.stepBar, i <= indicePaso && styles.stepBarActive]} />
+                  ))}
+                </View>
+              )}
+
+              {!!mensaje && (
+                <View style={styles.errorBox}>
+                  <Ionicons name="alert-circle" size={20} color={PRIMARY} style={styles.errorIcon} />
+                  <View style={styles.errorTextWrap}>
+                    {!!mensaje.titulo && <Text style={styles.errorTitle}>{mensaje.titulo}</Text>}
+                    <Text style={styles.errorText}>{mensaje.texto}</Text>
+                  </View>
+                </View>
+              )}
 
               {paso === 'login' && (
                 <>
@@ -266,31 +372,32 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={cambiar(setEmail)}
                   />
                   <CampoTexto
                     icono="lock-closed-outline"
                     placeholder="Contraseña"
                     secure
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={cambiar(setPassword)}
                     returnKeyType="go"
                     onSubmitEditing={handleLogin}
                   />
 
-                  <TouchableOpacity onPress={() => setPaso('correo')} hitSlop={8}>
+                  <TouchableOpacity onPress={() => irA('correo')} hitSlop={8}>
                     <Text style={styles.linkOlvido}>¿Olvidaste tu contraseña?</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.btnPrimary, { marginTop: 4 }]}
+                    style={[styles.btnPrimary, { marginTop: 4 }, loading && styles.btnDisabled]}
                     onPress={handleLogin}
                     disabled={loading}
+                    activeOpacity={0.85}
                   >
                     {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Entrar</Text>}
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={styles.btnSecondary} onPress={cerrarModal}>
+                  <TouchableOpacity style={styles.btnSecondary} onPress={cerrarModal} activeOpacity={0.85}>
                     <Text style={styles.btnSecondaryText}>Cancelar</Text>
                   </TouchableOpacity>
                 </>
@@ -305,21 +412,18 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     value={email}
-                    onChangeText={setEmail}
+                    onChangeText={cambiar(setEmail)}
                     returnKeyType="go"
                     onSubmitEditing={enviarCodigo}
                   />
 
                   <TouchableOpacity
-                    style={[styles.btnPrimary, { marginTop: 8 }]}
+                    style={[styles.btnPrimary, { marginTop: 8 }, loading && styles.btnDisabled]}
                     onPress={enviarCodigo}
                     disabled={loading}
+                    activeOpacity={0.85}
                   >
                     {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Enviar código</Text>}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.btnSecondary} onPress={() => setPaso('login')}>
-                    <Text style={styles.btnSecondaryText}>Volver</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -337,25 +441,22 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     autoCorrect={false}
                     value={codigo}
-                    onChangeText={setCodigo}
+                    onChangeText={cambiar(setCodigo)}
                     returnKeyType="go"
                     onSubmitEditing={verificarCodigo}
                   />
 
                   <TouchableOpacity
-                    style={[styles.btnPrimary, { marginTop: 8 }]}
+                    style={[styles.btnPrimary, { marginTop: 8 }, loading && styles.btnDisabled]}
                     onPress={verificarCodigo}
                     disabled={loading}
+                    activeOpacity={0.85}
                   >
                     {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Verificar código</Text>}
                   </TouchableOpacity>
 
                   <TouchableOpacity onPress={enviarCodigo} disabled={loading} hitSlop={8}>
                     <Text style={styles.linkOlvido}>Reenviar código</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.btnSecondary} onPress={() => setPaso('correo')}>
-                    <Text style={styles.btnSecondaryText}>Cambiar correo</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -367,22 +468,23 @@ export default function LoginScreen() {
                     placeholder="Nueva contraseña"
                     secure
                     value={nuevaPassword}
-                    onChangeText={setNuevaPassword}
+                    onChangeText={cambiar(setNuevaPassword)}
                   />
                   <CampoTexto
                     icono="lock-closed-outline"
                     placeholder="Repite la contraseña"
                     secure
                     value={confirmarPassword}
-                    onChangeText={setConfirmarPassword}
+                    onChangeText={cambiar(setConfirmarPassword)}
                     returnKeyType="go"
                     onSubmitEditing={guardarPassword}
                   />
 
                   <TouchableOpacity
-                    style={[styles.btnPrimary, { marginTop: 8 }]}
+                    style={[styles.btnPrimary, { marginTop: 8 }, loading && styles.btnDisabled]}
                     onPress={guardarPassword}
                     disabled={loading}
+                    activeOpacity={0.85}
                   >
                     {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnPrimaryText}>Guardar y entrar</Text>}
                   </TouchableOpacity>
@@ -398,38 +500,92 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   bg: { flex: 1 },
-  safe: { flex: 1, justifyContent: 'flex-end' },
+  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.38)' },
+  safe: { flex: 1, justifyContent: 'space-between' },
+
+  // Texto sobre la foto
+  hero: { paddingHorizontal: 28, paddingTop: 28 },
+  heroTitle: { fontSize: 36, fontWeight: '900', color: '#fff', letterSpacing: -1 },
+  heroSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.9)', marginTop: 6, lineHeight: 22, maxWidth: 280 },
+
+  // Hoja inferior
   sheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
-    paddingTop: 48,
+    paddingTop: 58,
     alignItems: 'center',
+    boxShadow: '0px -6px 24px rgba(0,0,0,0.12)',
   },
   logoCircle: {
-    width: 72, height: 72, borderRadius: 36,
+    width: 84, height: 84, borderRadius: 42,
     backgroundColor: PRIMARY,
     alignItems: 'center', justifyContent: 'center',
-    position: 'absolute', top: -36,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 8,
-    borderWidth: 3, borderColor: '#fff',
+    position: 'absolute', top: -42,
+    borderWidth: 4, borderColor: '#fff',
+    overflow: 'hidden',
+    boxShadow: '0px 6px 14px rgba(0,0,0,0.25)',
   },
-  logoText: { fontSize: 32, fontWeight: '900', color: '#fff' },
-  welcome: { fontSize: 16, color: '#555', marginTop: 8, textAlign: 'center' },
-  appName: { fontSize: 24, fontWeight: '900', color: '#1a1a1a', marginBottom: 28, textAlign: 'center' },
+  logoImg: { width: '100%', height: '100%' },
+  logoText: { fontSize: 34, fontWeight: '900', color: '#fff' },
+  welcome: { fontSize: 19, fontWeight: '600', color: '#0f0f0f', textAlign: 'center' },
+  welcomeSub: {
+    fontSize: 28, fontWeight: '900', color: PRIMARY, textAlign: 'center',
+    letterSpacing: 2.6, lineHeight: 34, marginTop: 2, marginBottom: 26,
+  },
+    superO: { color: PRIMARY },
+    ferta: { color: SECUNDARY },
+    appText: { fontWeight: '900', color: '#0f0f0f', letterSpacing: 0.7 },
   buttons: { width: '100%', gap: 12 },
-  btnPrimary: { backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 16, alignItems: 'center', width: '100%' },
+
+  // Botones
+  btnPrimary: {
+    backgroundColor: PRIMARY, borderRadius: 16, paddingVertical: 16,
+    alignItems: 'center', width: '100%',
+    boxShadow: '0px 4px 12px rgba(194,24,7,0.28)',
+  },
   btnPrimaryText: { fontSize: 16, fontWeight: '800', color: '#fff' },
-  btnSecondary: { borderRadius: 14, paddingVertical: 15, alignItems: 'center', width: '100%', borderWidth: 2, borderColor: PRIMARY },
+  btnSecondary: {
+    borderRadius: 16, paddingVertical: 15, alignItems: 'center',
+    width: '100%', borderWidth: 1.5, borderColor: PRIMARY,
+  },
   btnSecondaryText: { fontSize: 16, fontWeight: '700', color: PRIMARY },
-  skipText: { fontSize: 14, color: PRIMARY, fontWeight: '600', textAlign: 'center', paddingVertical: 8 },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, gap: 12 },
-  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 8 },
-  modalTitle: { fontSize: 22, fontWeight: '900', color: '#1a1a1a' },
-  modalSubtitle: { fontSize: 14, color: '#888', marginBottom: 4 },
+  btnDisabled: { opacity: 0.7 },
+  skipText: { fontSize: 14, color: '#777', fontWeight: '600', textAlign: 'center', paddingVertical: 8 },
+
+  // Modal
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  modalSheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 24, paddingTop: 12, gap: 12,
+  },
+  handle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#ddd', marginBottom: 6 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  modalHeaderText: { flex: 1 },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19, backgroundColor: '#f2f2f4',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalTitle: { fontSize: 22, fontWeight: '900', color: INK, letterSpacing: -0.4 },
+  modalSubtitle: { fontSize: 14, color: '#888', marginTop: 2 },
+
+  // Indicador de pasos de la recuperación
+  steps: { flexDirection: 'row', gap: 6 },
+  stepBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#ececec' },
+  stepBarActive: { backgroundColor: PRIMARY },
+
+  // Error inline
+  errorBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
+    backgroundColor: '#fdecea', borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  errorIcon: { marginTop: 1 },
+  errorTextWrap: { flex: 1 },
+  errorTitle: { fontSize: 14, fontWeight: '800', color: PRIMARY, marginBottom: 2 },
+  errorText: { fontSize: 13, color: '#8a1b10', lineHeight: 18 },
+
   linkOlvido: { fontSize: 14, color: PRIMARY, fontWeight: '700', textAlign: 'center', paddingVertical: 4 },
   hint: { fontSize: 13, color: '#666', lineHeight: 18 },
 });

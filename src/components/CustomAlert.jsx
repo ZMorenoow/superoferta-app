@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
 
 export default function CustomAlert({ visible, icon = 'checkmark-circle', iconColor = '#1B6B3A', title, message, buttonText = 'OK', onPress }) {
   return (
