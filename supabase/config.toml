@@ -465,3 +465,6 @@ entrypoint = "./functions/oneclick-card-delete/index.js"
 
 [functions.oneclick-payment]
 entrypoint = "./functions/oneclick-payment/index.js"
+
+[functions.enviar-reporte]
+entrypoint = "./functions/enviar-reporte/index.js"

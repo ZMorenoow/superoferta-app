@@ -12,7 +12,26 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../../utils/supabase';
 
-const PRIMARY = '#C21807';
+const PRIMARY = '#ED1D26';
+const ROJO_SUAVE = '#FDECEA';
+const INK = '#16181D';
+const MUTED = '#6B7280';
+const BG = '#F3F4F6';
+
+const FilaInfo = ({ icono, label, valor, ultima }) => (
+  <>
+    <View style={styles.infoRow}>
+      <View style={styles.iconoCaja}>
+        <Ionicons name={icono} size={20} color={PRIMARY} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue} numberOfLines={1}>{valor}</Text>
+      </View>
+    </View>
+    {!ultima && <View style={styles.divider} />}
+  </>
+);
 
 export default function PickerPerfilScreen() {
   const router = useRouter();
@@ -45,7 +64,7 @@ export default function PickerPerfilScreen() {
         .single();
 
       if (data) {
-        setNombre(`${data.nombre} ${data.apellido}`);
+        setNombre([data.nombre, data.apellido].filter(Boolean).join(' '));
         setSucursal(data.sucursales?.nombre ?? null);
       }
 
@@ -76,435 +95,157 @@ export default function PickerPerfilScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Mi Perfil</Text>
-          <Text style={styles.subtitle}>
-            Administra tu información personal
-          </Text>
+        <View style={styles.header}>
+          <Text style={styles.title}>Mi perfil</Text>
         </View>
 
-        <View style={styles.headerIcon}>
-          <Ionicons name="person-outline" size={22} color={PRIMARY} />
-        </View>
-      </View>
+        {/* Ficha del picker */}
+        <View style={styles.hero}>
+          <View style={styles.avatar}>
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.avatarText}>{iniciales}</Text>
+            )}
+          </View>
 
-      {/* PERFIL PRINCIPAL */}
-      <View style={styles.profileCard}>
-        <View style={styles.avatar}>
-          {loading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.avatarText}>{iniciales}</Text>
-          )}
-        </View>
-
-        <View style={styles.profileInfo}>
-          {loading ? (
-            <>
-              <View style={styles.skeletonName} />
-              <View style={styles.skeletonEmail} />
-            </>
-          ) : (
-            <>
-              <Text style={styles.nombre} numberOfLines={1}>
-                {nombre || 'Usuario'}
-              </Text>
-
-              <View style={styles.emailRow}>
-                <Ionicons name="mail-outline" size={15} color="#888" />
-
-                <Text style={styles.email} numberOfLines={1}>
-                  {email}
+          <View style={styles.heroInfo}>
+            {loading ? (
+              <>
+                <View style={styles.skeletonName} />
+                <View style={styles.skeletonEmail} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.heroNombre} numberOfLines={1}>
+                  {nombre || 'Picker'}
                 </Text>
-              </View>
 
-              {/* SUCURSAL DEL PICKER */}
-              {sucursal && (
-                <View style={styles.sucursalBadge}>
-                  <Ionicons
-                    name="storefront-outline"
-                    size={14}
-                    color={PRIMARY}
-                  />
-
-                  <Text style={styles.sucursalText} numberOfLines={1}>
-                    {sucursal}
+                <View style={styles.heroEmailRow}>
+                  <Ionicons name="mail-outline" size={14} color="rgba(255,255,255,0.65)" />
+                  <Text style={styles.heroEmail} numberOfLines={1}>
+                    {email}
                   </Text>
                 </View>
-              )}
-            </>
+
+                {sucursal && (
+                  <View style={styles.sucursalChip}>
+                    <Ionicons name="storefront-outline" size={14} color="#F5B8BB" />
+                    <Text style={styles.sucursalText} numberOfLines={1}>
+                      {sucursal}
+                    </Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+
+        {/* Datos de la cuenta */}
+        <Text style={styles.sectionTitle}>Mi cuenta</Text>
+
+        <View style={styles.card}>
+          <FilaInfo icono="person-outline" label="Nombre" valor={nombre || 'No disponible'} />
+          <FilaInfo icono="mail-outline" label="Correo electrónico" valor={email || 'No disponible'} ultima={!sucursal} />
+          {!!sucursal && (
+            <FilaInfo icono="storefront-outline" label="Sucursal" valor={sucursal} ultima />
           )}
         </View>
 
-        <View style={styles.verifiedBadge}>
-          <Ionicons name="checkmark-circle" size={18} color="#2E7D32" />
-        </View>
-      </View>
+        {/* Soporte */}
+        <Text style={styles.sectionTitle}>Soporte</Text>
 
-      {/* INFORMACIÓN */}
-      <Text style={styles.sectionTitle}>Información de cuenta</Text>
-
-      <View style={styles.infoCard}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoIcon}>
-            <Ionicons name="person-outline" size={20} color={PRIMARY} />
-          </View>
-
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Nombre</Text>
-            <Text style={styles.infoValue}>
-              {nombre || 'No disponible'}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.infoRow}>
-          <View style={styles.infoIcon}>
-            <Ionicons name="mail-outline" size={20} color={PRIMARY} />
-          </View>
-
-          <View style={styles.infoContent}>
-            <Text style={styles.infoLabel}>Correo electrónico</Text>
-            <Text style={styles.infoValue} numberOfLines={1}>
-              {email || 'No disponible'}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* CUENTA */}
-      <Text style={styles.sectionTitle}>Cuenta</Text>
-
-      <View style={styles.menuCard}>
-        <TouchableOpacity
-          style={styles.menuItem}
-          activeOpacity={0.7}
-          onPress={() => {}}
-        >
-          <View style={styles.menuLeft}>
-            <View style={styles.menuIcon}>
-              <Ionicons
-                name="help-circle-outline"
-                size={20}
-                color={PRIMARY}
-              />
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => router.push('/picker/ayuda_picker')}
+          >
+            <View style={styles.iconoCaja}>
+              <Ionicons name="help-buoy-outline" size={20} color={PRIMARY} />
             </View>
 
-            <View>
-              <Text style={styles.menuTitle}>Ayuda</Text>
-              <Text style={styles.menuSubtitle}>¿Necesitas ayuda?</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuTitle}>Ayuda y reclamos</Text>
+              <Text style={styles.menuSubtitle}>Cuéntanos si tuviste un problema</Text>
             </View>
-          </View>
 
-          <Ionicons name="chevron-forward" size={19} color="#BDBDBD" />
-        </TouchableOpacity>
+            <Ionicons name="chevron-forward" size={19} color="#BDC1C8" />
+          </TouchableOpacity>
+        </View>
 
-        <View style={styles.divider} />
-
-      </View>
-
-      {/* CERRAR SESIÓN */}
-      <TouchableOpacity
-        style={styles.logoutBtn}
-        activeOpacity={0.75}
-        onPress={handleLogout}
-      >
-        <View style={styles.logoutIcon}>
+        {/* Cerrar sesión */}
+        <TouchableOpacity style={styles.logoutBtn} activeOpacity={0.8} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={21} color={PRIMARY} />
-        </View>
-
-        <Text style={styles.logoutText}>Cerrar sesión</Text>
-
-        <Ionicons name="chevron-forward" size={18} color="#D7A19B" />
-      </TouchableOpacity>
+          <Text style={styles.logoutText}>Cerrar sesión</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  container: { flex: 1, backgroundColor: BG },
+  scrollContent: { paddingHorizontal: 16, paddingBottom: 40 },
 
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-  },
+  header: { paddingHorizontal: 4, paddingTop: 8, paddingBottom: 18 },
+  title: { fontSize: 26, fontWeight: '800', color: INK, letterSpacing: -0.5 },
 
-  // HEADER
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-    paddingBottom: 22,
+  // Ficha
+  hero: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: INK, borderRadius: 24, padding: 18,
+    boxShadow: '0px 8px 20px rgba(22,24,29,0.22)',
   },
-
-  title: {
-    fontSize: 27,
-    fontWeight: '800',
-    color: '#1A1A1A',
-  },
-
-  subtitle: {
-    fontSize: 13,
-    color: '#888',
-    marginTop: 4,
-  },
-
-  headerIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#FDECEA',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // PROFILE
-  profileCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 3,
-    },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-
   avatar: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: PRIMARY,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: PRIMARY,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    width: 70, height: 70, borderRadius: 35, backgroundColor: PRIMARY,
+    alignItems: 'center', justifyContent: 'center',
   },
-
-  avatarText: {
-    color: '#fff',
-    fontSize: 23,
-    fontWeight: '800',
+  avatarText: { color: '#fff', fontSize: 24, fontWeight: '800' },
+  heroInfo: { flex: 1, marginLeft: 16 },
+  heroNombre: { fontSize: 20, fontWeight: '800', color: '#fff', letterSpacing: -0.3 },
+  heroEmailRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 4 },
+  heroEmail: { flex: 1, fontSize: 12.5, color: 'rgba(255,255,255,0.65)' },
+  sucursalChip: {
+    alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, marginTop: 10,
   },
-
-  profileInfo: {
-    flex: 1,
-    marginLeft: 15,
-    marginRight: 8,
-  },
-
-  nombre: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1A1A1A',
-  },
-
-  emailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 5,
-  },
-
-  email: {
-    flex: 1,
-    fontSize: 12.5,
-    color: '#888',
-  },
-
-  verifiedBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#EAF5EC',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
+  sucursalText: { flexShrink: 1, fontSize: 12, fontWeight: '700', color: '#fff' },
   skeletonName: {
-    width: 130,
-    height: 18,
-    borderRadius: 6,
-    backgroundColor: '#EEEEEE',
+    width: 130, height: 18, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.14)',
   },
-
   skeletonEmail: {
-    width: 170,
-    height: 12,
-    borderRadius: 5,
-    backgroundColor: '#F1F1F1',
-    marginTop: 8,
+    width: 170, height: 12, borderRadius: 5, marginTop: 10,
+    backgroundColor: 'rgba(255,255,255,0.09)',
   },
 
-  sucursalBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FDECEA',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginTop: 8,
-    gap: 5,
-  },
-
-  sucursalText: {
-    flexShrink: 1,
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: PRIMARY,
-  },
-
-  // SECTIONS
+  // Secciones
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#444',
-    marginTop: 24,
-    marginBottom: 10,
-    marginLeft: 3,
+    fontSize: 14, fontWeight: '800', color: '#4B5563',
+    marginTop: 26, marginBottom: 10, marginLeft: 4,
   },
-
-  // INFO
-  infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    paddingHorizontal: 16,
+  card: {
+    backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 16,
+    boxShadow: '0px 3px 12px rgba(16,24,40,0.05)',
   },
-
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
+  iconoCaja: {
+    width: 40, height: 40, borderRadius: 13, backgroundColor: ROJO_SUAVE,
+    alignItems: 'center', justifyContent: 'center', marginRight: 13,
   },
+  infoRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14 },
+  infoLabel: { fontSize: 11.5, color: '#9AA0A8', marginBottom: 2 },
+  infoValue: { fontSize: 14.5, fontWeight: '700', color: INK },
+  divider: { height: 1, backgroundColor: '#F1F2F4' },
 
-  infoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FDECEA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 13,
-  },
+  menuItem: { minHeight: 68, flexDirection: 'row', alignItems: 'center' },
+  menuTitle: { fontSize: 14.5, fontWeight: '700', color: INK },
+  menuSubtitle: { fontSize: 12, color: MUTED, marginTop: 2 },
 
-  infoContent: {
-    flex: 1,
-  },
-
-  infoLabel: {
-    fontSize: 11,
-    color: '#999',
-    marginBottom: 3,
-  },
-
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#222',
-  },
-
-  // MENU
-  menuCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-  },
-
-  menuItem: {
-    minHeight: 65,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-
-  menuLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-
-  menuIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FDECEA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 13,
-  },
-
-  menuTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#222',
-  },
-
-  menuSubtitle: {
-    fontSize: 11.5,
-    color: '#999',
-    marginTop: 3,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: '#F2F2F2',
-  },
-
-  // LOGOUT
+  // Cerrar sesión
   logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 22,
-    backgroundColor: '#FFF',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: '#F4D9D5',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    marginTop: 24, backgroundColor: ROJO_SUAVE, borderRadius: 18, paddingVertical: 15,
   },
-
-  logoutIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FDECEA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-
-  logoutText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: PRIMARY,
-  },
-
-  version: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: '#B0B0B0',
-    marginTop: 16,
-  },
+  logoutText: { fontSize: 15, fontWeight: '800', color: PRIMARY },
 });

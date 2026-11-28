@@ -230,15 +230,6 @@ export default function PickerHome() {
           <Text style={styles.greeting}>Hola, {nombre} 👋</Text>
           <Text style={styles.title}>Tus pedidos de hoy</Text>
         </View>
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={async () => {
-            await supabase.auth.signOut();
-            router.replace('/login');
-          }}
-        >
-          <Ionicons name="log-out-outline" size={22} color="#888" />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.statsRow}>
@@ -300,7 +291,6 @@ const styles = StyleSheet.create({
   },
   greeting: { fontSize: 13, color: '#888' },
   title: { fontSize: 24, fontWeight: '800', color: '#1a1a1a' },
-  logoutBtn: { padding: 8 },
   statsRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10, marginBottom: 16 },
   statCard: {
     flex: 1, backgroundColor: '#fff', borderRadius: 14,

@@ -132,7 +132,7 @@ export default function OrderStatusScreen() {
           <TouchableOpacity style={styles.boton} onPress={() => router.replace('/mis_pedidos')}>
             <Text style={styles.botonTexto}>Ver mis pedidos</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.replace('/')}>
+          <TouchableOpacity onPress={() => router.replace('/HomeScreen')}>
             <Text style={styles.link}>Volver al inicio</Text>
           </TouchableOpacity>
         </View>

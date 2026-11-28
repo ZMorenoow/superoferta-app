@@ -71,6 +71,12 @@
         "projectId": "9af28aa5-41f4-4f0e-849d-dae2a7e61fc5"
       }
     },
-    "owner": "zmorenoows-team"
+    "owner": "zmorenoows-team",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9af28aa5-41f4-4f0e-849d-dae2a7e61fc5"
+    }
   }
 }

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,7 +15,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CampoTexto from '../components/CampoTexto';
+import { distanciaKm, formatearDistancia } from '../utils/distancia';
 import { supabase } from '../utils/supabase';
+import useUbicacion from '../utils/useUbicacion';
 
 const PRIMARY = '#C21807';
 const MIN_PASSWORD = 6; // mínimo por defecto de Supabase
@@ -45,11 +47,14 @@ export default function RegisterScreen() {
 
   const [loading, setLoading] = useState(false);
 
+  // Ubicación del cliente para calcular los km a cada sucursal (si no la da, no se muestran km)
+  const { ubicacion } = useUbicacion();
+
   useEffect(() => {
     const cargarSucursales = async () => {
       const { data, error } = await supabase
         .from('sucursales')
-        .select('id, nombre')
+        .select('id, nombre, latitud, longitud')
         .eq('activo', true)
         .order('nombre');
       if (!error && data) setSucursales(data);
@@ -57,7 +62,28 @@ export default function RegisterScreen() {
     cargarSucursales();
   }, []);
 
-  const sucursalActual = sucursales.find((s) => s.id === sucursalSeleccionada);
+  // Agrega los km a cada sucursal y, si hay ubicación, ordena de la más cercana a la más lejana
+  const sucursalesConKm = useMemo(() => {
+    const lista = sucursales.map((s) => {
+      const tieneCoords = s.latitud != null && s.longitud != null;
+      const km =
+        ubicacion && tieneCoords
+          ? distanciaKm(ubicacion.latitude, ubicacion.longitude, s.latitud, s.longitud)
+          : null;
+      return { ...s, km };
+    });
+
+    if (!ubicacion) return lista;
+
+    return lista.sort((a, b) => {
+      if (a.km === null && b.km === null) return a.nombre.localeCompare(b.nombre);
+      if (a.km === null) return 1;
+      if (b.km === null) return -1;
+      return a.km - b.km;
+    });
+  }, [sucursales, ubicacion]);
+
+  const sucursalActual = sucursalesConKm.find((s) => s.id === sucursalSeleccionada);
   const correoLimpio = correo.trim().toLowerCase();
 
   // Carga el perfil, guarda el rol y entra a la app (igual que en el login)
@@ -312,13 +338,16 @@ export default function RegisterScreen() {
                   <Text style={sucursalActual ? styles.dropdownText : styles.dropdownPlaceholder}>
                     {sucursalActual ? sucursalActual.nombre : 'Selecciona una sucursal'}
                   </Text>
+                  {!!sucursalActual && sucursalActual.km !== null && (
+                    <Text style={styles.kmText}>{formatearDistancia(sucursalActual.km)}</Text>
+                  )}
                   <Ionicons name={dropdownAbierto ? 'chevron-up' : 'chevron-down'} size={18} color="#888" />
                 </TouchableOpacity>
 
                 {dropdownAbierto && (
                   <View style={styles.dropdownList}>
                     <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                      {sucursales.map((s) => (
+                      {sucursalesConKm.map((s) => (
                         <TouchableOpacity
                           key={s.id}
                           style={[styles.dropdownItem, sucursalSeleccionada === s.id && styles.dropdownItemActive]}
@@ -327,9 +356,13 @@ export default function RegisterScreen() {
                             setDropdownAbierto(false);
                           }}
                         >
-                          <Text style={[styles.sucursalText, sucursalSeleccionada === s.id && styles.sucursalTextActive]}>
+                          <Text
+                            style={[styles.sucursalText, sucursalSeleccionada === s.id && styles.sucursalTextActive]}
+                            numberOfLines={1}
+                          >
                             {s.nombre}
                           </Text>
+                          {s.km !== null && <Text style={styles.kmText}>{formatearDistancia(s.km)}</Text>}
                           {sucursalSeleccionada === s.id && (
                             <Ionicons name="checkmark" size={18} color={PRIMARY} />
                           )}
@@ -399,13 +432,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', maxHeight: 220, overflow: 'hidden',
   },
   dropdownItem: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: '#f2f2f2',
   },
   dropdownItemActive: { backgroundColor: '#fdecea' },
-  sucursalText: { fontSize: 14, color: '#555', fontWeight: '600' },
+  sucursalText: { flex: 1, fontSize: 14, color: '#555', fontWeight: '600' },
   sucursalTextActive: { color: PRIMARY },
+  kmText: { fontSize: 13, fontWeight: '700', color: PRIMARY },
 
   btnPrimary: {
     backgroundColor: PRIMARY, borderRadius: 14, paddingVertical: 16,
